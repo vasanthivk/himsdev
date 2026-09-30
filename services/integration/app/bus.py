@@ -56,11 +56,13 @@ class OutboxRelay(threading.Thread):
         conn = ch = None
         while not self.stop_event.is_set():
             try:
-                if ch is None or ch.is_closed:
+                if ch is None or ch.is_closed or conn is None or conn.is_closed:
                     conn = connect()
                     ch = conn.channel()
                     declare_events_topology(ch)
                     ch.confirm_delivery()
+                else:
+                    conn.process_data_events(time_limit=0)   # pump the ioloop so a dead socket is noticed now, not later
                 n = self.relay_batch(ch)
                 if n == 0:
                     time.sleep(0.7)
@@ -134,6 +136,8 @@ class Consumer(threading.Thread):
                 log.info("%s consuming %s", self.name, self.queue)
                 while not self.stop_event.is_set() and conn.is_open:
                     conn.process_data_events(time_limit=1)
+                    if ch.is_closed:
+                        raise pika.exceptions.ChannelWrongStateError("channel closed unexpectedly")
             except Exception as e:
                 log.warning("%s connection lost: %s; reconnecting in 5s", self.name, e)
             finally:
@@ -152,13 +156,22 @@ class Consumer(threading.Thread):
         except Exception as e:
             retry = int((props.headers or {}).get("x-retry", 0))
             log.warning("%s failed on message (attempt %d/%d): %s", self.name, retry + 1, self.MAX_RETRIES, e)
-            if retry < self.MAX_RETRIES:
-                time.sleep(min(2 * (retry + 1), 8))
-                ch.basic_publish("", self.queue, body, pika.BasicProperties(content_type=props.content_type, delivery_mode=2,
-                                                                          message_id=props.message_id, headers={"x-retry": retry + 1}))
-                ch.basic_ack(method.delivery_tag)
-            else:
-                ch.basic_nack(method.delivery_tag, requeue=False)         # -> <queue>.dlq
+            try:
+                if retry < self.MAX_RETRIES:
+                    time.sleep(min(2 * (retry + 1), 8))
+                    ch.basic_publish("", self.queue, body, pika.BasicProperties(content_type=props.content_type, delivery_mode=2,
+                                                                              message_id=props.message_id, headers={"x-retry": retry + 1}))
+                    ch.basic_ack(method.delivery_tag)
+                else:
+                    ch.basic_nack(method.delivery_tag, requeue=False)     # -> <queue>.dlq
+            except Exception as ack_err:
+                # The channel/connection is likely already dead - force the outer loop to reconnect
+                # instead of leaving this thread in a state where it looks alive but never recovers.
+                log.error("%s could not ack/nack/requeue (connection likely dead): %s - forcing reconnect", self.name, ack_err)
+                try:
+                    ch.connection.close()
+                except Exception:
+                    pass
 
 
 # def publish_device_message(raw: str, analyzer_code: str) -> None:
