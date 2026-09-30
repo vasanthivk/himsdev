@@ -35,8 +35,8 @@ services/integration/data/payloads/*.txt
 # ---------- Log files (logs folder and its subfolders) ----------
 logs/**/*.log
 
-# ---------- Zip files in backup folder ----------
-backup/*.zip
+# ---------- Zip files (entire hims application) ----------
+*.zip
 
 # ---------- Config files: frontend and services folders ----------
 config_files/frontend/
