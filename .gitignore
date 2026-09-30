@@ -13,6 +13,9 @@ frontend/*/.next/
 services/*/bin/
 services/*/obj/
 
+# ---------- Services: appsettings.json in every application ----------
+services/*/appsettings.json
+
 # ---------- Shared: build output in every project ----------
 shared/*/bin/
 shared/*/obj/
@@ -34,3 +37,7 @@ logs/**/*.log
 
 # ---------- Zip files in backup folder ----------
 backup/*.zip
+
+# ---------- Config files: frontend and services folders ----------
+config_files/frontend/
+config_files/services/
