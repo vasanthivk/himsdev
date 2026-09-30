@@ -1,0 +1,36 @@
+# ---------- Environment files (all applications) ----------
+.env
+.env.*
+!.env.example
+
+# ---------- Frontend: node_modules in every application ----------
+frontend/*/node_modules/
+
+# ---------- Frontend: Next.js build output in every application ----------
+frontend/*/.next/
+
+# ---------- Services: build output in every application ----------
+services/*/bin/
+services/*/obj/
+
+# ---------- Shared: build output in every project ----------
+shared/*/bin/
+shared/*/obj/
+
+# ---------- Visual Studio cache folders (all applications) ----------
+.vs/
+
+# ---------- Integration service (Python) ----------
+services/integration/.venv/
+services/integration/venv/
+services/integration/**/__pycache__/
+services/integration/data/payloads/*.txt
+
+# ---------- PID files ----------
+.pids/*.pid
+
+# ---------- Log files (logs folder and its subfolders) ----------
+logs/**/*.log
+
+# ---------- Zip files in backup folder ----------
+backup/*.zip
