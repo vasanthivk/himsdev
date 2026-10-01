@@ -1,9 +1,11 @@
 using Hims.Common.Http;
+using Hims.Common.Logging;
 using Hims.PatientAccess.Data;
 
 // Patient Access: UHID/MPI, patient registration, encounters (OP visits). Publishes PatientRegistered, PatientUpdated,
 // EncounterStarted, EncounterClosed. Keeps ref copies of organization/branch/department/practitioner data.
 var builder = WebApplication.CreateBuilder(args);
+builder.AddHimsFileLogging("patient-access");   // logs/patient-access/dd-MM-yyyy.log (+ dd-MM-yyyy-error.log)
 builder.AddHimsService<PatientAccessDbContext>("patient-access", "HIMS Patient Access",
     "Front office: patient registration (UHID) and encounters. Publishes PatientRegistered, PatientUpdated, EncounterStarted, EncounterClosed.");
 

@@ -24,10 +24,11 @@ from .config import settings
 from .engine import provision_interface
 from .fhir_client import FhirClient
 from .inbound import process_inbound
+from .logging_setup import configure_logging
 from .parsers import build_hl7v2_ack
 import httpx
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+configure_logging(settings.log_dir)
 log = logging.getLogger("hub")
 
 stop_event = threading.Event()

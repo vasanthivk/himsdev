@@ -14,13 +14,15 @@
 #   ./scripts/integration.sh restart --install [--hidelogs]
 #   ./scripts/integration.sh status                  check /health
 #
-# Logs: ./logs/integration.log     PID: ./.pids/integration.pid
+# Logs: ./logs/integration/dd-MM-yyyy.log (one file per day, written by the app)
+#       ./logs/integration/console.log  (raw stdout/stderr - startup errors before logging is set up)
+# PID:  ./.pids/integration.pid
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 HUB_DIR="services/integration"
 HUB_PORT=5011
-mkdir -p logs .pids
+mkdir -p logs/integration .pids
 
 # ------------------------------------------------------------------------------------------------ stop
 
@@ -74,21 +76,22 @@ do_start() {
     echo "  RABBITMQ_URL=$RABBITMQ_URL"
     echo "  DATABASE_URL=$DATABASE_URL"
 
-    nohup uvicorn app.main:app --port "$HUB_PORT" > "../../logs/integration.log" 2>&1 &
+    nohup uvicorn app.main:app --port "$HUB_PORT" > "../../logs/integration/console.log" 2>&1 &
     echo $! > "../../.pids/integration.pid"
   )
   echo "  started integration (pid $(cat .pids/integration.pid)) -> port $HUB_PORT"
   echo "Docs: http://localhost:$HUB_PORT/docs"
 
   if [ "$hide_logs" = "hide" ]; then
-    echo "Logs hidden (--hidelogs). Watch later with: tail -f logs/integration.log"
+    echo "Logs hidden (--hidelogs). Watch later with: tail -F logs/integration/\$(date +%d-%m-%Y).log"
     return
   fi
 
-  echo "Tailing logs/integration.log - Ctrl+C stops watching (the hub keeps running in the background)."
+  local today_log="logs/integration/$(date +%d-%m-%Y).log"
+  echo "Tailing $today_log - Ctrl+C stops watching (the hub keeps running in the background)."
   echo
   sleep 1   # give uvicorn a moment to write its first lines before we start tailing
-  tail -f logs/integration.log
+  tail -F "$today_log"
 }
 
 # ------------------------------------------------------------------------------------------------ status

@@ -35,6 +35,7 @@ class Settings:
     engine_channel_url: str = os.getenv("ENGINE_CHANNEL_URL", "").rstrip("/")  # the deployed channel's own HTTP endpoint, e.g. http://103.169.179.22:50057/hims-lab
     
     payload_dir: str = os.getenv("PAYLOAD_DIR", "./data/payloads")
+    log_dir: str = os.getenv("LOG_DIR", "../../logs/integration")   # daily files dd-MM-yyyy.log; default = <repo>/logs/integration when run from services/integration
     device_timezone: str = os.getenv("DEVICE_TIMEZONE", "Asia/Kolkata")   # HL7 timestamps without an offset are in this zone
     enable_simulator: bool = _bool("ENABLE_SIMULATOR", True)
     cors_origins: tuple = tuple(o for o in os.getenv("CORS_ORIGINS", ",".join("http://localhost:%d" % p for p in [3000] + list(range(3001, 3014)))).split(",") if o)

@@ -1,4 +1,5 @@
 using Hims.Common.Http;
+using Hims.Common.Logging;
 using Hims.Laboratory.Data;
 using Hims.Laboratory.Handlers;
 using Hims.Laboratory.Services;
@@ -6,6 +7,7 @@ using Hims.Laboratory.Services;
 // Laboratory (LIMS): worklist, samples, analyzers (devices) and results.
 // Subscribes OrderPlaced and AnalyzerResultReceived. Publishes SampleCollected, ResultVerified, LabReportReleased, CriticalValueDetected.
 var builder = WebApplication.CreateBuilder(args);
+builder.AddHimsFileLogging("laboratory");   // logs/laboratory/dd-MM-yyyy.log (+ dd-MM-yyyy-error.log)
 builder.AddHimsService<LaboratoryDbContext>("laboratory", "HIMS Laboratory (LIMS & Blood Centre)",
     "Lab worklist, sample collection, analyzers and results. Subscribes OrderPlaced, AnalyzerResultReceived; publishes SampleCollected, ResultVerified, LabReportReleased, CriticalValueDetected.");
 
