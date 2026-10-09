@@ -22,6 +22,21 @@ public class CreateAnalyzerRequest
     public string? SendingApplicationId { get; set; }
     public string? HostAddress { get; set; }
     public int? Port { get; set; }
+
+    // Open Integration Engine connection for this device. Anything left empty falls back to the Integration Hub's own setting.
+    /// <summary>Engine REST API base URL, e.g. https://engine-host:8443</summary>
+    [MaxLength(200)] public string? EngineUrl { get; set; }
+    [MaxLength(100)] public string? EngineUser { get; set; }
+    [MaxLength(200)] public string? EnginePassword { get; set; }
+    public bool? EngineVerifyTls { get; set; }
+    /// <summary>Name of the engine channel that is cloned for this device.</summary>
+    [MaxLength(100)] public string? EngineTemplateChannel { get; set; }
+    /// <summary>Listen port = this + analyzer id when Port is empty.</summary>
+    public int? EngineFirstListenPort { get; set; }
+    /// <summary>Where the engine's HTTP Sender posts back to the Integration Hub.</summary>
+    [MaxLength(200)] public string? HubPublicUrl { get; set; }
+    /// <summary>The deployed channel's own HTTP endpoint (device messages are sent here).</summary>
+    [MaxLength(200)] public string? EngineChannelUrl { get; set; }
 }
 
 public class ParameterMapRequest
@@ -66,6 +81,9 @@ public class AnalyzersController : ControllerBase
             SendingApplicationId = string.IsNullOrWhiteSpace(req.SendingApplicationId) ? req.AnalyzerCode : req.SendingApplicationId,
             HostAddress = req.HostAddress, Port = req.Port, ChannelStatus = "PENDING",
             ConnectionDetails = $"{protocol} {req.HostAddress}:{req.Port}".Trim(),
+            EngineUrl = Blank(req.EngineUrl), EngineUser = Blank(req.EngineUser), EnginePassword = Blank(req.EnginePassword),
+            EngineVerifyTls = req.EngineVerifyTls, EngineTemplateChannel = Blank(req.EngineTemplateChannel),
+            EngineFirstListenPort = req.EngineFirstListenPort, HubPublicUrl = Blank(req.HubPublicUrl), EngineChannelUrl = Blank(req.EngineChannelUrl),
         };
         _db.Analyzers.Add(analyzer);
         await _db.SaveChangesAsync(ct);
@@ -117,12 +135,16 @@ public class AnalyzersController : ControllerBase
         return a is null ? NotFound() : Ok(a);
     }
 
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private async Task<string> ProvisionAsync(Analyzer a, CancellationToken ct)
     {
         try
         {
             var r = await _hub.ProvisionAsync(new ProvisionInterfaceRequest(a.AnalyzerId, a.AnalyzerCode, a.AnalyzerName, a.InterfaceProtocol ?? "HL7V2",
-                a.SendingApplicationId, a.HostAddress, a.Port, a.IsBidirectional), ct);
+                a.SendingApplicationId, a.HostAddress, a.Port, a.IsBidirectional,
+                a.EngineUrl, a.EngineUser, a.EnginePassword, a.EngineVerifyTls, a.EngineTemplateChannel, a.EngineFirstListenPort,
+                a.HubPublicUrl, a.EngineChannelUrl), ct);
             a.IntegrationChannelId = r.ChannelId;
             a.RoutingKey = r.RoutingKey;
             a.ChannelStatus = r.Status;

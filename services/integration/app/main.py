@@ -7,6 +7,7 @@ Workers (started with the app when RABBITMQ_ENABLED=true):
   * FHIR sync       RabbitMQ queue integration.events (domain events) -> ref.* + HAPI FHIR + intg.fhir_resource_map
 HTTP API: provision a device channel in the Open Integration Engine, HTTP inbound for engines that POST, message log, FHIR map, simulator.
 """
+import asyncio
 import logging
 import os
 import threading
@@ -21,7 +22,7 @@ from pydantic import BaseModel
 
 from . import bus, db, fhir_sync, simulator
 from .config import settings
-from .engine import provision_interface
+from .engine import EngineConfig, provision_interface
 from .fhir_client import FhirClient
 from .inbound import process_inbound
 from .logging_setup import configure_logging
@@ -101,6 +102,15 @@ class InterfaceRequest(BaseModel):
     hostAddress: Optional[str] = None
     port: Optional[int] = None
     isBidirectional: bool = False
+    # Open Integration Engine connection for this device (entered on "Add a device"). Empty = this hub's own setting (.env).
+    engineUrl: Optional[str] = None
+    engineUser: Optional[str] = None
+    enginePassword: Optional[str] = None
+    engineVerifyTls: Optional[bool] = None
+    engineTemplateChannel: Optional[str] = None
+    engineFirstListenPort: Optional[int] = None
+    hubPublicUrl: Optional[str] = None
+    engineChannelUrl: Optional[str] = None      # not needed to provision; Laboratory keeps it for sending messages to the channel
 
 
 class InterfaceResponse(BaseModel):
@@ -114,8 +124,11 @@ class InterfaceResponse(BaseModel):
 def create_interface(req: InterfaceRequest):
     """Called by Laboratory when a device (lab.analyzer) is added. Clones the template channel in the Open Integration Engine for this
     device and deploys it. Always answers 200 with status PROVISIONED, PENDING (engine not configured) or FAILED (+ message)."""
+    config = EngineConfig.resolve(url=req.engineUrl, user=req.engineUser, password=req.enginePassword, verify_tls=req.engineVerifyTls,
+                                  template_channel=req.engineTemplateChannel, first_listen_port=req.engineFirstListenPort,
+                                  hub_public_url=req.hubPublicUrl)
     result = provision_interface(analyzer_id=req.analyzerId, code=req.analyzerCode, name=req.analyzerName, protocol=req.protocol.upper(),
-                                 sending_app=req.sendingApplicationId, host=req.hostAddress, port=req.port)
+                                 sending_app=req.sendingApplicationId, host=req.hostAddress, port=req.port, config=config)
     with db.tx() as conn:
         db.log_message(conn, interface_code=req.protocol.upper()[:30], direction="OUT", message_type="CHANNEL_PROVISION", correlation_id=req.analyzerCode[:100],
                        entity_type="lab.analyzer", entity_id=req.analyzerId, status="PROCESSED" if result["status"] == "PROVISIONED" else result["status"],
@@ -219,6 +232,24 @@ class SimulateRequest(BaseModel):
     abnormal: bool = False
     critical: bool = False
     via: Optional[str] = None      # "rabbitmq" (direct to RabbitMQ), "engine" (through the deployed channel), or "direct" (skip transport, parse immediately)
+    engineChannelUrl: Optional[str] = None      # the device's own channel endpoint for via="engine" (http://host:port/path, or mllp://host:port for a TCP Listener); empty = ENGINE_CHANNEL_URL
+
+
+async def send_mllp(host: str, port: int, raw: str) -> str:
+    """Sends one message framed for MLLP (<VT> message <FS><CR>) and returns the engine's reply (the HL7 ACK) without its framing."""
+    reader, writer = await asyncio.open_connection(host, port)
+    try:
+        writer.write(b"\x0b" + raw.encode("utf-8") + b"\x1c\r")
+        await writer.drain()
+        reply = b""
+        while b"\x1c" not in reply:
+            chunk = await reader.read(4096)
+            if not chunk:
+                break
+            reply += chunk
+        return reply.split(b"\x1c")[0].lstrip(b"\x0b").decode("utf-8", errors="replace")
+    finally:
+        writer.close()
 
 
 @app.post("/api/simulator/send", tags=["Simulator"])
@@ -236,14 +267,27 @@ async def simulate(req: SimulateRequest):
     via = (req.via or ("rabbitmq" if settings.rabbitmq_enabled else "direct")).lower()
 
     if via == "engine":
-        if not settings.engine_channel_url:
-            raise HTTPException(422, "ENGINE_CHANNEL_URL is not configured - set it in .env to the deployed channel's HTTP endpoint")
+        channel_url = (req.engineChannelUrl or "").strip().rstrip("/") or settings.engine_channel_url
+        if not channel_url:
+            raise HTTPException(422, "No engine channel URL for this device - enter it when adding the device, or set ENGINE_CHANNEL_URL in .env "
+                                     "to the deployed channel's HTTP endpoint")
+        target = urlparse(channel_url)
+        if target.scheme in ("mllp", "tcp"):        # the channel is a TCP Listener (HL7 v2 over MLLP), as a real analyzer would use
+            if not target.hostname or not target.port:
+                raise HTTPException(422, f"Engine channel URL '{channel_url}' must look like mllp://host:port")
+            try:
+                ack = await asyncio.wait_for(send_mllp(target.hostname, target.port, raw), timeout=15)
+            except (OSError, asyncio.TimeoutError) as e:
+                raise HTTPException(502, f"Could not deliver to the engine channel at {channel_url}: {e or 'timed out'}")
+            return {"delivered": "engine", "messageId": message_id, "format": req.format.upper(), "engineAck": ack[:600], "preview": raw[:600]}
+        if target.scheme not in ("http", "https"):
+            raise HTTPException(422, f"Engine channel URL '{channel_url}' must start with http://, https:// or mllp://")
         content_type = "application/json" if req.format.upper() == "FHIR" else "text/plain"
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(settings.engine_channel_url + "/", content=raw.encode("utf-8"), headers={"Content-Type": content_type})
+                resp = await client.post(channel_url + "/", content=raw.encode("utf-8"), headers={"Content-Type": content_type})
         except httpx.RequestError as e:
-            raise HTTPException(502, f"Could not reach the engine channel at {settings.engine_channel_url}: {e}")
+            raise HTTPException(502, f"Could not reach the engine channel at {channel_url}: {e}")
         return {"delivered": "engine", "messageId": message_id, "format": req.format.upper(),
                 "engineHttpStatus": resp.status_code, "preview": raw[:600]}
 

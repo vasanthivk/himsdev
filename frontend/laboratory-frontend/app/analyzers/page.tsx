@@ -4,7 +4,10 @@ import { API, api, errMsg } from '@/lib/api';
 import { Alert, Badge, Card, Field, statusTone } from '@/components/ui';
 
 const blank = { branchId: '', analyzerCode: '', analyzerName: '', manufacturer: '', model: '', labSection: 'HEMATOLOGY', interfaceProtocol: 'HL7V2',
-  sendingApplicationId: '', hostAddress: '', port: '', isBidirectional: false };
+  sendingApplicationId: '', hostAddress: '', port: '', isBidirectional: false,
+  // Open Integration Engine connection for this device; a field left empty uses the Integration Hub's own setting
+  engineUrl: '', engineUser: '', enginePassword: '', engineVerifyTls: false, engineTemplateChannel: '', engineFirstListenPort: '',
+  hubPublicUrl: '', engineChannelUrl: '' };
 
 export default function Analyzers() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error' | 'warn'; text: string } | null>(null);
@@ -31,7 +34,8 @@ export default function Analyzers() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault(); setMsg(null);
-    const body: any = { ...form, branchId: Number(form.branchId), port: form.port ? Number(form.port) : null };
+    const body: any = { ...form, branchId: Number(form.branchId), port: form.port ? Number(form.port) : null,
+      engineFirstListenPort: form.engineFirstListenPort ? Number(form.engineFirstListenPort) : null };
     Object.keys(body).forEach((k) => { if (body[k] === '') delete body[k]; });
     try {
       const r = await api(API.laboratory, '/api/analyzers', { body });
@@ -75,6 +79,18 @@ export default function Analyzers() {
             <Field label="Port"><input type="number" value={form.port} onChange={set('port')} placeholder="auto" /></Field>
             <label className="row" style={{ alignSelf: 'end' }}><input type="checkbox" style={{ width: 'auto' }} checked={form.isBidirectional} onChange={(e) => setForm({ ...form, isBidirectional: e.target.checked })} />bidirectional</label>
           </div>
+          <h3 style={{ marginTop: 16 }}>Open Integration Engine</h3>
+          <p className="muted">Where this device's channel is created and where its messages are sent. A field left empty uses the Integration Hub's own setting.</p>
+          <div className="grid">
+            <Field label="Engine URL"><input value={form.engineUrl} onChange={set('engineUrl')} placeholder="https://engine-host:8443" /></Field>
+            <Field label="Engine user"><input value={form.engineUser} onChange={set('engineUser')} placeholder="admin" autoComplete="off" /></Field>
+            <Field label="Engine password"><input type="password" value={form.enginePassword} onChange={set('enginePassword')} autoComplete="new-password" /></Field>
+            <Field label="Template channel"><input value={form.engineTemplateChannel} onChange={set('engineTemplateChannel')} placeholder="HIMS-Analyzer-Template" /></Field>
+            <Field label="First listen port"><input type="number" value={form.engineFirstListenPort} onChange={set('engineFirstListenPort')} placeholder="used when Port is empty" /></Field>
+            <Field label="Hub public URL"><input value={form.hubPublicUrl} onChange={set('hubPublicUrl')} placeholder="http://hub-host:5011" /></Field>
+            <Field label="Engine channel URL"><input value={form.engineChannelUrl} onChange={set('engineChannelUrl')} placeholder="http://engine-host:6665/hims-lab or mllp://engine-host:6661" /></Field>
+            <label className="row" style={{ alignSelf: 'end' }}><input type="checkbox" style={{ width: 'auto' }} checked={form.engineVerifyTls} onChange={(e) => setForm({ ...form, engineVerifyTls: e.target.checked })} />verify engine TLS certificate</label>
+          </div>
           <div style={{ marginTop: 12 }}><button>Add device &amp; create integration channel</button></div>
         </form>
       </Card>
@@ -83,7 +99,7 @@ export default function Analyzers() {
         <table><thead><tr><th>Code</th><th>Name</th><th>Protocol</th><th>Device id (MSH-3)</th><th>Channel</th><th>Routing key</th><th /></tr></thead><tbody>
           {list.map((a) => (
             <tr key={a.analyzerId}><td><strong>{a.analyzerCode}</strong></td><td>{a.analyzerName}<div className="muted">{a.manufacturer} {a.model}</div></td><td>{a.interfaceProtocol}</td><td>{a.sendingApplicationId}</td>
-              <td><Badge tone={statusTone(a.channelStatus)}>{a.channelStatus ?? '-'}</Badge><div className="muted">{a.integrationChannelId}</div></td><td className="muted">{a.routingKey}</td>
+              <td><Badge tone={statusTone(a.channelStatus)}>{a.channelStatus ?? '-'}</Badge><div className="muted">{a.integrationChannelId}</div><div className="muted">{a.engineUrl}</div></td><td className="muted">{a.routingKey}</td>
               <td>{a.channelStatus !== 'PROVISIONED' && <button className="secondary" onClick={() => reprovision(a.analyzerId)}>Provision</button>}</td></tr>))}
           {list.length === 0 && <tr><td colSpan={7} className="muted">No devices yet.</td></tr>}
         </tbody></table>

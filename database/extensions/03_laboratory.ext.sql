@@ -14,3 +14,14 @@ ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS port                    INT   
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS integration_channel_id  VARCHAR(100) NULL;  -- channel id returned by the Open Integration Engine
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS routing_key             VARCHAR(150) NULL;  -- RabbitMQ routing key the engine publishes this instrument's results under
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS channel_status          VARCHAR(20)  NULL;  -- PROVISIONED, PENDING, FAILED
+
+-- Open Integration Engine connection for this device, entered on the "Add a device" form. NULL = the Integration Hub's own
+-- setting (services/integration/.env) is used.
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_url              VARCHAR(200) NULL;  -- engine REST API base, e.g. https://engine-host:8443
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_user             VARCHAR(100) NULL;
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_password         VARCHAR(200) NULL;  -- kept for re-provisioning; never returned by the Laboratory API
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_verify_tls       BOOLEAN      NULL;
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_template_channel VARCHAR(100) NULL;  -- channel cloned for this device
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_first_listen_port INT         NULL;  -- listen port = this + analyzer id when `port` is empty
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS hub_public_url          VARCHAR(200) NULL;  -- where the engine's HTTP Sender posts back to the hub
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_channel_url      VARCHAR(200) NULL;  -- the deployed channel's own HTTP endpoint (messages are sent here)

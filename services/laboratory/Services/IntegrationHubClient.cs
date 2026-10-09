@@ -4,7 +4,10 @@ using Hims.Common.Events;
 namespace Hims.Laboratory.Services;
 
 public record ProvisionInterfaceRequest(int AnalyzerId, string AnalyzerCode, string AnalyzerName, string Protocol,
-    string? SendingApplicationId, string? HostAddress, int? Port, bool IsBidirectional);
+    string? SendingApplicationId, string? HostAddress, int? Port, bool IsBidirectional,
+    // Open Integration Engine connection for this device; null = the hub's own setting
+    string? EngineUrl = null, string? EngineUser = null, string? EnginePassword = null, bool? EngineVerifyTls = null,
+    string? EngineTemplateChannel = null, int? EngineFirstListenPort = null, string? HubPublicUrl = null, string? EngineChannelUrl = null);
 
 public record ProvisionInterfaceResponse(string ChannelId, string RoutingKey, string Status, string? Message);
 

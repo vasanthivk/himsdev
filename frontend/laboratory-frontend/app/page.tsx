@@ -54,7 +54,9 @@ export default function Lab() {
   async function simulate(s: any) {
     setBusy(`s${s.sampleId}`); setMsg(null);
     try {
-      const r = await api(API.integration, '/api/simulator/send', { body: { sampleBarcode: s.sampleBarcode, serviceCodes: s.serviceCodes, ...sim } });
+      // "via engine" posts to the selected device's own channel endpoint (entered when the device was added)
+      const engineChannelUrl = analyzers.find((a) => a.analyzerCode === sim.analyzerCode)?.engineChannelUrl || undefined;
+      const r = await api(API.integration, '/api/simulator/send', { body: { sampleBarcode: s.sampleBarcode, serviceCodes: s.serviceCodes, ...sim, engineChannelUrl } });
       setMsg({ kind: 'info', text: `Device message ${r.messageId} sent via ${r.delivered}. It flows Integration Hub -> RabbitMQ -> Laboratory; results appear below in a few seconds.` });
     } catch (e) { bad(e); }
     setBusy('');

@@ -16073,6 +16073,70 @@
      "null": true,
      "pk": false,
      "identity": false
+    },
+    {
+     "col": "engine_url",
+     "prop": "EngineUrl",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "engine_user",
+     "prop": "EngineUser",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "engine_password",
+     "prop": "EnginePassword",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "engine_verify_tls",
+     "prop": "EngineVerifyTls",
+     "type": "bool",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "engine_template_channel",
+     "prop": "EngineTemplateChannel",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "engine_first_listen_port",
+     "prop": "EngineFirstListenPort",
+     "type": "int",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "hub_public_url",
+     "prop": "HubPublicUrl",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "engine_channel_url",
+     "prop": "EngineChannelUrl",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
     }
    ]
   },

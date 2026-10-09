@@ -1,0 +1,47 @@
+[2026-10-09 10:49:01] === HIMS database backup started ===
+[2026-10-09 10:49:01] Host: 103.169.179.22:50085  User: hims
+[2026-10-09 10:49:01] Destination: /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901
+[2026-10-09 10:49:01] pg_dump: /C/Program Files/PostgreSQL/18/bin/pg_dump.exe   pg_dumpall: /C/Program Files/PostgreSQL/18/bin/pg_dumpall.exe
+[2026-10-09 10:49:03] Found 16 database(s): hims_back_office hims_clinical_care hims_comms_docs hims_digital_engagement hims_doctor_consultation hims_field_ops hims_hospital_ops hims_identity_org hims_imaging hims_integration hims_lab_lims hims_laboratory hims_patient_access hims_patient_billing hims_pharmacy_supply hims_revenue_cycle
+[2026-10-09 10:49:03] Backing up hims_back_office -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_back_office.dump
+[2026-10-09 10:49:04]   OK (140K)
+[2026-10-09 10:49:04] Backing up hims_clinical_care -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_clinical_care.dump
+[2026-10-09 10:49:05]   OK (196K)
+[2026-10-09 10:49:05] Backing up hims_comms_docs -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_comms_docs.dump
+[2026-10-09 10:49:05]   OK (20K)
+[2026-10-09 10:49:05] Backing up hims_digital_engagement -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_digital_engagement.dump
+[2026-10-09 10:49:06]   OK (76K)
+[2026-10-09 10:49:06] Backing up hims_doctor_consultation -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_doctor_consultation.dump
+pg_dump: error: query failed: ERROR:  permission denied for schema core
+pg_dump: detail: Query was: LOCK TABLE core.number_sequence, mst.order_set, mst.order_set_item, emr.diagnosis, ord.clinical_order, ord.order_item, ord.prescription, ord.prescription_item IN ACCESS SHARE MODE
+[2026-10-09 10:49:06]   FAILED: see /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/backup.log for details
+[2026-10-09 10:49:06] Backing up hims_field_ops -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_field_ops.dump
+[2026-10-09 10:49:07]   OK (36K)
+[2026-10-09 10:49:07] Backing up hims_hospital_ops -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_hospital_ops.dump
+[2026-10-09 10:49:08]   OK (64K)
+[2026-10-09 10:49:08] Backing up hims_identity_org -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_identity_org.dump
+[2026-10-09 10:49:09]   OK (92K)
+[2026-10-09 10:49:09] Backing up hims_imaging -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_imaging.dump
+[2026-10-09 10:49:09]   OK (64K)
+[2026-10-09 10:49:10] Backing up hims_integration -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_integration.dump
+[2026-10-09 10:49:10]   OK (32K)
+[2026-10-09 10:49:10] Backing up hims_lab_lims -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_lab_lims.dump
+pg_dump: error: query failed: ERROR:  permission denied for schema core
+pg_dump: detail: Query was: LOCK TABLE core.number_sequence, mst.lab_test, mst.lab_parameter, lab.sample, lab.sample_order_item, lab.analyzer, lab.worklist, lab.worklist_item, lab.result, intg.fhir_resource_map, intg.message_log IN ACCESS SHARE MODE
+[2026-10-09 10:49:10]   FAILED: see /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/backup.log for details
+[2026-10-09 10:49:11] Backing up hims_laboratory -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_laboratory.dump
+[2026-10-09 10:49:11]   OK (136K)
+[2026-10-09 10:49:11] Backing up hims_patient_access -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_patient_access.dump
+[2026-10-09 10:49:12]   OK (116K)
+[2026-10-09 10:49:12] Backing up hims_patient_billing -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_patient_billing.dump
+pg_dump: error: query failed: ERROR:  permission denied for schema core
+pg_dump: detail: Query was: LOCK TABLE core.number_sequence, pat.patient, pat.patient_payer, pat.encounter, mst.service_category, mst.service, mst.payer, mst.tariff_plan, mst.package, bil.bill, bil.bill_line, bil.receipt, bil.receipt_tender IN ACCESS SHARE MODE
+[2026-10-09 10:49:12]   FAILED: see /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/backup.log for details
+[2026-10-09 10:49:13] Backing up hims_pharmacy_supply -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_pharmacy_supply.dump
+[2026-10-09 10:49:13]   OK (176K)
+[2026-10-09 10:49:13] Backing up hims_revenue_cycle -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/hims_revenue_cycle.dump
+[2026-10-09 10:49:14]   OK (148K)
+[2026-10-09 10:49:14] Backing up global objects (roles/tablespaces) -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261009_104901/globals.sql
+[2026-10-09 10:49:15]   OK
+[2026-10-09 10:49:15] Pruning backups older than 14 day(s) in /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps
+[2026-10-09 10:49:15] === Backup completed WITH ERRORS. Failed: hims_doctor_consultation hims_lab_lims hims_patient_billing ===

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization.Metadata;
 using Hims.Common.Http;
 using Hims.Common.Logging;
 using Hims.Laboratory.Data;
@@ -10,6 +11,21 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddHimsFileLogging("laboratory");   // logs/laboratory/dd-MM-yyyy.log (+ dd-MM-yyyy-error.log)
 builder.AddHimsService<LaboratoryDbContext>("laboratory", "HIMS Laboratory (LIMS & Blood Centre)",
     "Lab worklist, sample collection, analyzers and results. Subscribes OrderPlaced, AnalyzerResultReceived; publishes SampleCollected, ResultVerified, LabReportReleased, CriticalValueDetected.");
+
+// lab.analyzer.engine_password is kept for re-provisioning but is never returned by the API.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(o =>
+    o.JsonSerializerOptions.TypeInfoResolver = new DefaultJsonTypeInfoResolver
+    {
+        Modifiers =
+        {
+            info =>
+            {
+                if (info.Type != typeof(Analyzer)) return;
+                foreach (var p in info.Properties)
+                    if (string.Equals(p.Name, nameof(Analyzer.EnginePassword), StringComparison.OrdinalIgnoreCase)) p.ShouldSerialize = (_, _) => false;
+            },
+        },
+    });
 
 builder.Services.AddScoped<ResultService>();
 builder.Services.AddHttpClient<IIntegrationHubClient, IntegrationHubClient>(c =>

@@ -10,6 +10,7 @@ import logging
 import re
 import uuid
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from typing import Optional
 from xml.sax.saxutils import escape
 
@@ -28,17 +29,44 @@ def slug(code: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", code.lower()).strip("-") or "analyzer"
 
 
+@dataclass(frozen=True)
+class EngineConfig:
+    """Connection to one Open Integration Engine. Entered per device on Laboratory's "Add a device" form; anything left empty
+    there falls back to this hub's own setting (.env)."""
+    url: str
+    user: str
+    password: str
+    verify_tls: bool
+    template_channel: str
+    first_listen_port: int
+    hub_public_url: str
+
+    @classmethod
+    def resolve(cls, *, url: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None,
+                verify_tls: Optional[bool] = None, template_channel: Optional[str] = None, first_listen_port: Optional[int] = None,
+                hub_public_url: Optional[str] = None) -> "EngineConfig":
+        def text(value: Optional[str], default: str) -> str:
+            return value.strip() if value and value.strip() else default
+        return cls(url=text(url, settings.engine_url).rstrip("/"), user=text(user, settings.engine_user),
+                   password=password if password else settings.engine_password,
+                   verify_tls=settings.engine_verify_tls if verify_tls is None else verify_tls,
+                   template_channel=text(template_channel, settings.engine_template_channel),
+                   first_listen_port=first_listen_port or settings.engine_first_listen_port,
+                   hub_public_url=text(hub_public_url, settings.hub_public_url).rstrip("/"))
+
+
 class OpenIntegrationEngine:
-    def __init__(self, session: Optional[requests.Session] = None):
+    def __init__(self, session: Optional[requests.Session] = None, config: Optional[EngineConfig] = None):
         self.http = session or requests.Session()
+        self.config = config or EngineConfig.resolve()
         self.logged_in = False
 
     def _url(self, path: str) -> str:
-        return f"{settings.engine_url}/api{path}"
+        return f"{self.config.url}/api{path}"
 
     def login(self) -> None:
-        r = self.http.post(self._url("/users/_login"), data={"username": settings.engine_user, "password": settings.engine_password},
-                           headers={"X-Requested-With": "OpenAPI", "Accept": "application/xml"}, verify=settings.engine_verify_tls, timeout=15)
+        r = self.http.post(self._url("/users/_login"), data={"username": self.config.user, "password": self.config.password},
+                           headers={"X-Requested-With": "OpenAPI", "Accept": "application/xml"}, verify=self.config.verify_tls, timeout=15)
         if r.status_code != 200 or "SUCCESS" not in r.text.upper():
             raise EngineError(f"Engine login failed: HTTP {r.status_code} {r.text[:200]}")
         self.logged_in = True
@@ -48,7 +76,7 @@ class OpenIntegrationEngine:
             self.login()
         headers = {"X-Requested-With": "OpenAPI", "Accept": "application/xml", **kw.pop("headers", {})}
         for attempt in (1, 2):
-            r = self.http.request(method, self._url(path), headers=headers, verify=settings.engine_verify_tls, timeout=30, **kw)
+            r = self.http.request(method, self._url(path), headers=headers, verify=self.config.verify_tls, timeout=30, **kw)
             if r.status_code == 401 and attempt == 1:       # session expired
                 self.logged_in = False
                 self.login()
@@ -91,27 +119,29 @@ def render_template(template_xml: str, channel_id: str, channel_name: str, value
 
 
 def provision_interface(*, analyzer_id: int, code: str, name: str, protocol: str, sending_app: Optional[str], host: Optional[str],
-                        port: Optional[int], engine: Optional[OpenIntegrationEngine] = None) -> dict:
+                        port: Optional[int], engine: Optional[OpenIntegrationEngine] = None, config: Optional[EngineConfig] = None) -> dict:
     """Returns {channelId, routingKey, status: PROVISIONED|PENDING|FAILED, message}. Never raises: Laboratory stores the status."""
     routing_key = f"lab.results.{slug(code)}"
-    if not settings.engine_url:
+    config = config or (engine.config if engine else EngineConfig.resolve())
+    if not config.url:
         return {"channelId": "", "routingKey": routing_key, "status": "PENDING",
-                "message": "ENGINE_URL is not set, so no channel was created. Configure the engine channel manually to publish to "
-                           f"exchange '{settings.integration_exchange}' with routing key '{routing_key}', or set ENGINE_URL and re-provision."}
-    engine = engine or OpenIntegrationEngine()
+                "message": "No engine URL was given for this device (and ENGINE_URL is not set), so no channel was created. Configure the "
+                           f"engine channel manually to publish to exchange '{settings.integration_exchange}' with routing key "
+                           f"'{routing_key}', or enter the engine URL and re-provision."}
+    engine = engine or OpenIntegrationEngine(config=config)
     channel_name = f"HIMS-{code}"
     try:
         ids = engine.channel_ids_by_name()
-        if settings.engine_template_channel not in ids:
+        if config.template_channel not in ids:
             return {"channelId": "", "routingKey": routing_key, "status": "FAILED",
-                    "message": f"Template channel '{settings.engine_template_channel}' was not found in the engine. Create it once (docs/ENGINE_TEMPLATE.md)."}
-        template = engine.get_channel_xml(ids[settings.engine_template_channel])
+                    "message": f"Template channel '{config.template_channel}' was not found in the engine. Create it once (docs/ENGINE_TEMPLATE.md)."}
+        template = engine.get_channel_xml(ids[config.template_channel])
         channel_id = ids.get(channel_name) or str(uuid.uuid4())
         xml = render_template(template, channel_id, channel_name, {
             "ANALYZER_ID": analyzer_id, "ANALYZER_CODE": code, "ANALYZER_NAME": name, "PROTOCOL": protocol,
-            "SENDING_APPLICATION_ID": sending_app or code, "DEVICE_HOST": host or "", "LISTEN_PORT": port or settings.engine_first_listen_port + analyzer_id,
+            "SENDING_APPLICATION_ID": sending_app or code, "DEVICE_HOST": host or "", "LISTEN_PORT": port or config.first_listen_port + analyzer_id,
             "ROUTING_KEY": routing_key, "RABBITMQ_URI": settings.rabbitmq_url, "RABBITMQ_EXCHANGE": settings.integration_exchange,
-            "HUB_INBOUND_URL": f"{settings.hub_public_url}/api/inbound?analyzer={code}",
+            "HUB_INBOUND_URL": f"{config.hub_public_url}/api/inbound?analyzer={code}",
         })
         import pathlib
         pathlib.Path("data").mkdir(exist_ok=True)

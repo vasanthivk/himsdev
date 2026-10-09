@@ -18,8 +18,16 @@ Only one table needed extra columns. They are added by a **separate** script, `d
 | `hims_laboratory` | `lab.analyzer` | `integration_channel_id` | `VARCHAR(100)` | yes | Channel id returned by the Open Integration Engine when the device was provisioned. |
 | `hims_laboratory` | `lab.analyzer` | `routing_key` | `VARCHAR(150)` | yes | RabbitMQ routing key (`lab.results.<code>`) the engine publishes this device's results under. |
 | `hims_laboratory` | `lab.analyzer` | `channel_status` | `VARCHAR(20)` | yes | `PROVISIONED`, `PENDING` (engine not configured / hub down) or `FAILED`. |
+| `hims_laboratory` | `lab.analyzer` | `engine_url` | `VARCHAR(200)` | yes | Open Integration Engine REST API base for this device, entered on "Add a device". `NULL` here (and in the columns below) = the hub's own setting. |
+| `hims_laboratory` | `lab.analyzer` | `engine_user` | `VARCHAR(100)` | yes | Engine login. |
+| `hims_laboratory` | `lab.analyzer` | `engine_password` | `VARCHAR(200)` | yes | Engine password, kept for re-provisioning. Stored as entered; never returned by the Laboratory API. |
+| `hims_laboratory` | `lab.analyzer` | `engine_verify_tls` | `BOOLEAN` | yes | Whether the engine's TLS certificate is verified. |
+| `hims_laboratory` | `lab.analyzer` | `engine_template_channel` | `VARCHAR(100)` | yes | Name of the engine channel cloned for this device. |
+| `hims_laboratory` | `lab.analyzer` | `engine_first_listen_port` | `INT` | yes | Listen port = this + analyzer id when `port` is empty. |
+| `hims_laboratory` | `lab.analyzer` | `hub_public_url` | `VARCHAR(200)` | yes | Where the engine's HTTP Sender posts back to the Integration Hub. |
+| `hims_laboratory` | `lab.analyzer` | `engine_channel_url` | `VARCHAR(200)` | yes | The deployed channel's own HTTP endpoint; device messages sent "via Open Integration Engine" go here. |
 
-The generated C# entity `Analyzer` (services/laboratory/Data/Entities.g.cs) carries these six properties, each marked
+The generated C# entity `Analyzer` (services/laboratory/Data/Entities.g.cs) carries these fourteen properties, each marked
 "Extension column" in its doc comment.
 
 Check on a live database:
@@ -27,7 +35,9 @@ Check on a live database:
 ```sql
 SELECT column_name, data_type, is_nullable FROM information_schema.columns
  WHERE table_schema = 'lab' AND table_name = 'analyzer'
-   AND column_name IN ('sending_application_id','host_address','port','integration_channel_id','routing_key','channel_status');
+   AND column_name IN ('sending_application_id','host_address','port','integration_channel_id','routing_key','channel_status',
+                       'engine_url','engine_user','engine_password','engine_verify_tls','engine_template_channel',
+                       'engine_first_listen_port','hub_public_url','engine_channel_url');
 ```
 
 ## Why nothing else needed a column

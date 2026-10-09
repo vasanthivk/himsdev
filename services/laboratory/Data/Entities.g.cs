@@ -365,6 +365,30 @@ public class Analyzer
     /// <summary>Extension column (database/extensions), not in the original script.</summary>
     [Column("channel_status")]
     public string? ChannelStatus { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("engine_url")]
+    public string? EngineUrl { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("engine_user")]
+    public string? EngineUser { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("engine_password")]
+    public string? EnginePassword { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("engine_verify_tls")]
+    public bool? EngineVerifyTls { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("engine_template_channel")]
+    public string? EngineTemplateChannel { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("engine_first_listen_port")]
+    public int? EngineFirstListenPort { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("hub_public_url")]
+    public string? HubPublicUrl { get; set; }
+    /// <summary>Extension column (database/extensions), not in the original script.</summary>
+    [Column("engine_channel_url")]
+    public string? EngineChannelUrl { get; set; }
 }
 
 /// <summary>Table <c>lab.analyzer_parameter_map</c></summary>

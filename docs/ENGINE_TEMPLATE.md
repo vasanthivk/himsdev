@@ -2,8 +2,10 @@
 
 "Add device" in Laboratory calls the Integration Hub (`POST /api/interfaces`). The hub does **not** hand-write channel XML: it clones a
 template channel you create once, fills placeholders, and deploys the clone as `HIMS-<analyzer code>`.
-Set `ENGINE_URL`, `ENGINE_USER`, `ENGINE_PASSWORD` for the hub (see `services/integration/.env.example`). Without `ENGINE_URL` the analyzer is saved
-with `channel_status = PENDING` and nothing is created in the engine.
+The engine connection (URL, user, password, verify TLS, template channel, first listen port, hub public URL, channel URL) is entered per
+device on the "Add a device" form and saved on `lab.analyzer`. A field left empty falls back to the hub's `ENGINE_*` / `HUB_PUBLIC_URL`
+setting (see `services/integration/.env.example`). With no engine URL in either place the analyzer is saved with `channel_status = PENDING`
+and nothing is created in the engine.
 
 ## Create the template once
 In the engine's administrator, create a channel named exactly **`HIMS-Analyzer-Template`** (the name is `ENGINE_TEMPLATE_CHANNEL`):
@@ -30,7 +32,7 @@ return ACK;
 ## Placeholders the hub fills
 `${ANALYZER_ID} ${ANALYZER_CODE} ${ANALYZER_NAME} ${PROTOCOL} ${SENDING_APPLICATION_ID} ${DEVICE_HOST} ${LISTEN_PORT} ${ROUTING_KEY} ${RABBITMQ_URI} ${RABBITMQ_EXCHANGE} ${HUB_INBOUND_URL}`
 
-`${LISTEN_PORT}` is the port entered when adding the device, else `ENGINE_FIRST_LISTEN_PORT + analyzer id`.
+`${LISTEN_PORT}` is the port entered when adding the device, else the device's first listen port (or `ENGINE_FIRST_LISTEN_PORT`) `+ analyzer id`.
 The clone gets a new channel id and the name `HIMS-<code>`; re-provisioning an existing device updates that channel and redeploys it.
 
 Not tested against a live engine (none was available while writing this); the REST calls follow the Mirth-compatible API
