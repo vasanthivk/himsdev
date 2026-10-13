@@ -351,12 +351,6 @@ public class Analyzer
     [Column("sending_application_id")]
     public string? SendingApplicationId { get; set; }
     /// <summary>Extension column (database/extensions), not in the original script.</summary>
-    [Column("host_address")]
-    public string? HostAddress { get; set; }
-    /// <summary>Extension column (database/extensions), not in the original script.</summary>
-    [Column("port")]
-    public int? Port { get; set; }
-    /// <summary>Extension column (database/extensions), not in the original script.</summary>
     [Column("integration_channel_id")]
     public string? IntegrationChannelId { get; set; }
     /// <summary>Extension column (database/extensions), not in the original script.</summary>
@@ -378,14 +372,8 @@ public class Analyzer
     [Column("engine_verify_tls")]
     public bool? EngineVerifyTls { get; set; }
     /// <summary>Extension column (database/extensions), not in the original script.</summary>
-    [Column("engine_template_channel")]
-    public string? EngineTemplateChannel { get; set; }
-    /// <summary>Extension column (database/extensions), not in the original script.</summary>
     [Column("engine_first_listen_port")]
     public int? EngineFirstListenPort { get; set; }
-    /// <summary>Extension column (database/extensions), not in the original script.</summary>
-    [Column("hub_public_url")]
-    public string? HubPublicUrl { get; set; }
     /// <summary>Extension column (database/extensions), not in the original script.</summary>
     [Column("engine_channel_url")]
     public string? EngineChannelUrl { get; set; }

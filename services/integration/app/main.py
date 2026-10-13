@@ -99,17 +99,13 @@ class InterfaceRequest(BaseModel):
     analyzerName: str
     protocol: str = "HL7V2"
     sendingApplicationId: Optional[str] = None
-    hostAddress: Optional[str] = None
-    port: Optional[int] = None
     isBidirectional: bool = False
     # Open Integration Engine connection for this device (entered on "Add a device"). Empty = this hub's own setting (.env).
     engineUrl: Optional[str] = None
     engineUser: Optional[str] = None
     enginePassword: Optional[str] = None
     engineVerifyTls: Optional[bool] = None
-    engineTemplateChannel: Optional[str] = None
-    engineFirstListenPort: Optional[int] = None
-    hubPublicUrl: Optional[str] = None
+    engineFirstListenPort: Optional[int] = None      # the port the device's channel listens on, used as entered
     engineChannelUrl: Optional[str] = None      # not needed to provision; Laboratory keeps it for sending messages to the channel
 
 
@@ -122,13 +118,12 @@ class InterfaceResponse(BaseModel):
 
 @app.post("/api/interfaces", response_model=InterfaceResponse, tags=["Devices"])
 def create_interface(req: InterfaceRequest):
-    """Called by Laboratory when a device (lab.analyzer) is added. Clones the template channel in the Open Integration Engine for this
-    device and deploys it. Always answers 200 with status PROVISIONED, PENDING (engine not configured) or FAILED (+ message)."""
+    """Called by Laboratory when a device (lab.analyzer) is added with "create channel". Creates the device's channel in the Open Integration
+    Engine from the template for its protocol and deploys it. Always answers 200 with status PROVISIONED, PENDING (engine not configured) or FAILED (+ message)."""
     config = EngineConfig.resolve(url=req.engineUrl, user=req.engineUser, password=req.enginePassword, verify_tls=req.engineVerifyTls,
-                                  template_channel=req.engineTemplateChannel, first_listen_port=req.engineFirstListenPort,
-                                  hub_public_url=req.hubPublicUrl)
+                                  listen_port=req.engineFirstListenPort)
     result = provision_interface(analyzer_id=req.analyzerId, code=req.analyzerCode, name=req.analyzerName, protocol=req.protocol.upper(),
-                                 sending_app=req.sendingApplicationId, host=req.hostAddress, port=req.port, config=config)
+                                 sending_app=req.sendingApplicationId, config=config)
     with db.tx() as conn:
         db.log_message(conn, interface_code=req.protocol.upper()[:30], direction="OUT", message_type="CHANNEL_PROVISION", correlation_id=req.analyzerCode[:100],
                        entity_type="lab.analyzer", entity_id=req.analyzerId, status="PROCESSED" if result["status"] == "PROVISIONED" else result["status"],

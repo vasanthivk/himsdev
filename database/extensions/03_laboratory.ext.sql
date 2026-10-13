@@ -9,8 +9,6 @@
 -- HL7 v2, HL7 v3 or FHIR). No schema change is needed for that.
 -- =============================================================================================
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS sending_application_id  VARCHAR(50)  NULL;  -- HL7 MSH-3 / FHIR Device identifier the instrument identifies itself with
-ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS host_address            VARCHAR(100) NULL;  -- host the Integration Engine listens on / polls for this instrument
-ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS port                    INT          NULL;
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS integration_channel_id  VARCHAR(100) NULL;  -- channel id returned by the Open Integration Engine
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS routing_key             VARCHAR(150) NULL;  -- RabbitMQ routing key the engine publishes this instrument's results under
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS channel_status          VARCHAR(20)  NULL;  -- PROVISIONED, PENDING, FAILED
@@ -21,7 +19,5 @@ ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_url              VARCHA
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_user             VARCHAR(100) NULL;
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_password         VARCHAR(200) NULL;  -- kept for re-provisioning; never returned by the Laboratory API
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_verify_tls       BOOLEAN      NULL;
-ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_template_channel VARCHAR(100) NULL;  -- channel cloned for this device
-ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_first_listen_port INT         NULL;  -- listen port = this + analyzer id when `port` is empty
-ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS hub_public_url          VARCHAR(200) NULL;  -- where the engine's HTTP Sender posts back to the hub
+ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_first_listen_port INT         NULL;  -- port the device's channel listens on inside the engine (used as entered)
 ALTER TABLE lab.analyzer ADD COLUMN IF NOT EXISTS engine_channel_url      VARCHAR(200) NULL;  -- the deployed channel's own HTTP endpoint (messages are sent here)

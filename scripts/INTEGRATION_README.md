@@ -51,8 +51,8 @@ running quietly alongside everything else, `integration.sh` is the better fit.
 
 ## What `start` actually does
 
-1. Checks `services/integration/.env` exists; if not, stops and tells you to copy
-   `.env.example` first.
+1. Checks `services/integration/.env` exists; if not, stops and tells you to create it
+   (or restore it with `config_files/copy_config_files_to_app.sh`) first.
 2. Creates `.venv` if it doesn't exist yet (`python -m venv .venv`).
 3. Activates it (`.venv/Scripts/activate` on Windows, `.venv/bin/activate` elsewhere).
 4. Installs dependencies only if `fastapi` isn't already importable, or if `--install` was passed.

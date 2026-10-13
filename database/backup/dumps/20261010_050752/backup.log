@@ -1,0 +1,39 @@
+[2026-10-10 05:07:53] === HIMS database backup started ===
+[2026-10-10 05:07:53] Host: 103.169.179.22:50085  User: hims
+[2026-10-10 05:07:53] Destination: /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752
+[2026-10-10 05:07:53] pg_dump: /C/Program Files/PostgreSQL/18/bin/pg_dump.exe   pg_dumpall: /C/Program Files/PostgreSQL/18/bin/pg_dumpall.exe
+[2026-10-10 05:07:54] Found 14 database(s): hims_back_office hims_clinical_care hims_comms_docs hims_digital_engagement hims_field_ops hims_hospital_ops hims_identity_org hims_imaging hims_integration hims_lab_lims hims_laboratory hims_patient_access hims_pharmacy_supply hims_revenue_cycle
+[2026-10-10 05:07:55] Backing up hims_back_office -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_back_office.dump
+[2026-10-10 05:07:56]   OK (140K)
+[2026-10-10 05:07:56] Backing up hims_clinical_care -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_clinical_care.dump
+[2026-10-10 05:07:58]   OK (200K)
+[2026-10-10 05:07:58] Backing up hims_comms_docs -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_comms_docs.dump
+[2026-10-10 05:07:59]   OK (20K)
+[2026-10-10 05:07:59] Backing up hims_digital_engagement -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_digital_engagement.dump
+[2026-10-10 05:08:00]   OK (76K)
+[2026-10-10 05:08:00] Backing up hims_field_ops -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_field_ops.dump
+[2026-10-10 05:08:01]   OK (36K)
+[2026-10-10 05:08:01] Backing up hims_hospital_ops -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_hospital_ops.dump
+[2026-10-10 05:08:03]   OK (64K)
+[2026-10-10 05:08:03] Backing up hims_identity_org -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_identity_org.dump
+[2026-10-10 05:08:04]   OK (92K)
+[2026-10-10 05:08:04] Backing up hims_imaging -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_imaging.dump
+[2026-10-10 05:08:05]   OK (64K)
+[2026-10-10 05:08:05] Backing up hims_integration -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_integration.dump
+[2026-10-10 05:08:06]   OK (36K)
+[2026-10-10 05:08:06] Backing up hims_lab_lims -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_lab_lims.dump
+pg_dump: error: query failed: ERROR:  permission denied for schema core
+pg_dump: detail: Query was: LOCK TABLE core.number_sequence, mst.lab_test, mst.lab_parameter, lab.sample, lab.sample_order_item, lab.analyzer, lab.worklist, lab.worklist_item, lab.result, intg.fhir_resource_map, intg.message_log IN ACCESS SHARE MODE
+[2026-10-10 05:08:07]   FAILED: see /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/backup.log for details
+[2026-10-10 05:08:07] Backing up hims_laboratory -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_laboratory.dump
+[2026-10-10 05:08:08]   OK (140K)
+[2026-10-10 05:08:08] Backing up hims_patient_access -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_patient_access.dump
+[2026-10-10 05:08:11]   OK (116K)
+[2026-10-10 05:08:11] Backing up hims_pharmacy_supply -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_pharmacy_supply.dump
+[2026-10-10 05:08:13]   OK (176K)
+[2026-10-10 05:08:13] Backing up hims_revenue_cycle -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/hims_revenue_cycle.dump
+[2026-10-10 05:08:14]   OK (152K)
+[2026-10-10 05:08:14] Backing up global objects (roles/tablespaces) -> /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps/20261010_050752/globals.sql
+[2026-10-10 05:08:14]   OK
+[2026-10-10 05:08:14] Pruning backups older than 14 day(s) in /d/Projects/2026/himspoc/hims-architecture/hims/database/backup/dumps
+[2026-10-10 05:08:15] === Backup completed WITH ERRORS. Failed: hims_lab_lims ===

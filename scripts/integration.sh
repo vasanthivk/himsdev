@@ -51,8 +51,8 @@ do_start() {
   command -v python >/dev/null 2>&1 || { echo "python not found - install Python 3.11+ and reopen Git Bash"; exit 1; }
 
   if [ ! -f "$HUB_DIR/.env" ]; then
-    echo "$HUB_DIR/.env not found. Copy .env.example to .env and fill in your real values first:"
-    echo "  cp $HUB_DIR/.env.example $HUB_DIR/.env"
+    echo "$HUB_DIR/.env not found. Create it first (settings are listed in $HUB_DIR/app/config.py),"
+    echo "or restore the saved copy:  ./config_files/copy_config_files_to_app.sh"
     exit 1
   fi
 

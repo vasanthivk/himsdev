@@ -20,8 +20,9 @@ public class CreateAnalyzerRequest
     public bool IsBidirectional { get; set; }
     /// <summary>What the instrument puts in HL7 MSH-3 (or FHIR Device id). Defaults to the analyzer code.</summary>
     public string? SendingApplicationId { get; set; }
-    public string? HostAddress { get; set; }
-    public int? Port { get; set; }
+    /// <summary>True = create and deploy a channel for this device in the Open Integration Engine. False = only save the device
+    /// (it uses a channel that already exists).</summary>
+    public bool CreateChannel { get; set; } = true;
 
     // Open Integration Engine connection for this device. Anything left empty falls back to the Integration Hub's own setting.
     /// <summary>Engine REST API base URL, e.g. https://engine-host:8443</summary>
@@ -29,12 +30,8 @@ public class CreateAnalyzerRequest
     [MaxLength(100)] public string? EngineUser { get; set; }
     [MaxLength(200)] public string? EnginePassword { get; set; }
     public bool? EngineVerifyTls { get; set; }
-    /// <summary>Name of the engine channel that is cloned for this device.</summary>
-    [MaxLength(100)] public string? EngineTemplateChannel { get; set; }
-    /// <summary>Listen port = this + analyzer id when Port is empty.</summary>
+    /// <summary>Port the device's channel listens on inside the engine, used as entered. Empty = the hub picks one.</summary>
     public int? EngineFirstListenPort { get; set; }
-    /// <summary>Where the engine's HTTP Sender posts back to the Integration Hub.</summary>
-    [MaxLength(200)] public string? HubPublicUrl { get; set; }
     /// <summary>The deployed channel's own HTTP endpoint (device messages are sent here).</summary>
     [MaxLength(200)] public string? EngineChannelUrl { get; set; }
 }
@@ -59,8 +56,9 @@ public class AnalyzersController : ControllerBase
     public AnalyzersController(LaboratoryDbContext db, IIntegrationHubClient hub, ILogger<AnalyzersController> log) { _db = db; _hub = hub; _log = log; }
 
     /// <summary>
-    /// Adds a device: inserts lab.analyzer, then asks the Integration Hub to create the matching channel in the Open Integration
-    /// Engine. If the hub is unreachable the analyzer is still saved with channel_status PENDING; call POST {id}/provision later.
+    /// Adds a device: inserts lab.analyzer, then (when CreateChannel is true) asks the Integration Hub to create the matching channel
+    /// in the Open Integration Engine. If the hub is unreachable the analyzer is still saved with channel_status PENDING; with
+    /// CreateChannel false it is saved with NOT_CREATED. Either way POST {id}/provision creates the channel later.
     /// </summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateAnalyzerRequest req, CancellationToken ct)
@@ -79,16 +77,20 @@ public class AnalyzersController : ControllerBase
             Manufacturer = req.Manufacturer, Model = req.Model, LabSection = req.LabSection, InterfaceProtocol = protocol,
             IsBidirectional = req.IsBidirectional, AnalyzerStatus = "ONLINE",
             SendingApplicationId = string.IsNullOrWhiteSpace(req.SendingApplicationId) ? req.AnalyzerCode : req.SendingApplicationId,
-            HostAddress = req.HostAddress, Port = req.Port, ChannelStatus = "PENDING",
-            ConnectionDetails = $"{protocol} {req.HostAddress}:{req.Port}".Trim(),
+            ChannelStatus = "PENDING", ConnectionDetails = protocol,
             EngineUrl = Blank(req.EngineUrl), EngineUser = Blank(req.EngineUser), EnginePassword = Blank(req.EnginePassword),
-            EngineVerifyTls = req.EngineVerifyTls, EngineTemplateChannel = Blank(req.EngineTemplateChannel),
-            EngineFirstListenPort = req.EngineFirstListenPort, HubPublicUrl = Blank(req.HubPublicUrl), EngineChannelUrl = Blank(req.EngineChannelUrl),
+            EngineVerifyTls = req.EngineVerifyTls, EngineFirstListenPort = req.EngineFirstListenPort, EngineChannelUrl = Blank(req.EngineChannelUrl),
         };
         _db.Analyzers.Add(analyzer);
         await _db.SaveChangesAsync(ct);
 
-        var message = await ProvisionAsync(analyzer, ct);
+        string message;
+        if (req.CreateChannel) message = await ProvisionAsync(analyzer, ct);
+        else
+        {
+            analyzer.ChannelStatus = "NOT_CREATED";
+            message = "No channel was created in the Open Integration Engine (not requested). The device uses an existing channel.";
+        }
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(Get), new { id = analyzer.AnalyzerId }, new { analyzer, provisioningMessage = message });
     }
@@ -142,9 +144,8 @@ public class AnalyzersController : ControllerBase
         try
         {
             var r = await _hub.ProvisionAsync(new ProvisionInterfaceRequest(a.AnalyzerId, a.AnalyzerCode, a.AnalyzerName, a.InterfaceProtocol ?? "HL7V2",
-                a.SendingApplicationId, a.HostAddress, a.Port, a.IsBidirectional,
-                a.EngineUrl, a.EngineUser, a.EnginePassword, a.EngineVerifyTls, a.EngineTemplateChannel, a.EngineFirstListenPort,
-                a.HubPublicUrl, a.EngineChannelUrl), ct);
+                a.SendingApplicationId, a.IsBidirectional,
+                a.EngineUrl, a.EngineUser, a.EnginePassword, a.EngineVerifyTls, a.EngineFirstListenPort, a.EngineChannelUrl), ct);
             a.IntegrationChannelId = r.ChannelId;
             a.RoutingKey = r.RoutingKey;
             a.ChannelStatus = r.Status;

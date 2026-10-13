@@ -16035,22 +16035,6 @@
      "identity": false
     },
     {
-     "col": "host_address",
-     "prop": "HostAddress",
-     "type": "string",
-     "null": true,
-     "pk": false,
-     "identity": false
-    },
-    {
-     "col": "port",
-     "prop": "Port",
-     "type": "int",
-     "null": true,
-     "pk": false,
-     "identity": false
-    },
-    {
      "col": "integration_channel_id",
      "prop": "IntegrationChannelId",
      "type": "string",
@@ -16107,25 +16091,9 @@
      "identity": false
     },
     {
-     "col": "engine_template_channel",
-     "prop": "EngineTemplateChannel",
-     "type": "string",
-     "null": true,
-     "pk": false,
-     "identity": false
-    },
-    {
      "col": "engine_first_listen_port",
      "prop": "EngineFirstListenPort",
      "type": "int",
-     "null": true,
-     "pk": false,
-     "identity": false
-    },
-    {
-     "col": "hub_public_url",
-     "prop": "HubPublicUrl",
-     "type": "string",
      "null": true,
      "pk": false,
      "identity": false

@@ -4,7 +4,7 @@ Microservices named exactly as in your data model (`database/DATA_MODEL_README.m
 **RabbitMQ only**. .NET 8 backends, one Python backend (Integration Hub), Next.js multi-zone frontends.
 
 ## The workflow
-1. **Add a device** - Laboratory > Analyzers. Laboratory saves `lab.analyzer`; the Python Integration Hub clones a template channel in the Open Integration Engine (`docs/ENGINE_TEMPLATE.md`).
+1. **Add a device** - Laboratory > Analyzers. Laboratory saves `lab.analyzer`; when asked to, the Python Integration Hub creates the device's channel in the Open Integration Engine from the template for its protocol (`docs/ENGINE_TEMPLATE.md`).
 2. **Register the patient** - Patient Access. UHID from `core.number_sequence`; `PatientRegistered` published.
 3. **OP visit + registration/consultation bill** - Patient Access (encounter), Billing (bill, payment).
 4. **Doctor consultation** - Clinical Care: complaint, SOAP note, diagnoses, prescription (`PrescriptionIssued`), lab order (`OrderPlaced`).

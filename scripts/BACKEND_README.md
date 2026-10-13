@@ -60,8 +60,8 @@ PIDs: `./.pids/<service>.pid`
    dependencies only if `fastapi` isn't already importable, loads `services/integration/.env`, then
    starts `uvicorn app.main:app --port 5011` in the background, logging to `logs/integration.log`.
 
-If `services/integration/.env` doesn't exist, the hub is skipped with a message telling you to copy
-`.env.example` to `.env` first — the other five .NET services still start normally.
+If `services/integration/.env` doesn't exist, the hub is skipped with a message telling you to create
+it first (or restore it with `config_files/copy_config_files_to_app.sh`) — the other five .NET services still start normally.
 
 ## What `stop` actually does
 
@@ -118,7 +118,7 @@ first (it creates `.venv` and installs dependencies), then `backend.sh` will fin
 
 **Hub starts but shows wrong `RABBITMQ_URL`/`DATABASE_URL`**
 Check `services/integration/.env` — any value containing a space must be double-quoted
-(e.g. `ENGINE_TEMPLATE_CHANNEL="HIMS Lab Results"`), or bash will misparse the file when it's
+(e.g. `SOME_NAME="two words"`), or bash will misparse the file when it's
 sourced.
 
 **A .NET service fails to build**

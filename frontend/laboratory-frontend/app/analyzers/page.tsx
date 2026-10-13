@@ -4,10 +4,14 @@ import { API, api, errMsg } from '@/lib/api';
 import { Alert, Badge, Card, Field, statusTone } from '@/components/ui';
 
 const blank = { branchId: '', analyzerCode: '', analyzerName: '', manufacturer: '', model: '', labSection: 'HEMATOLOGY', interfaceProtocol: 'HL7V2',
-  sendingApplicationId: '', hostAddress: '', port: '', isBidirectional: false,
+  sendingApplicationId: '', isBidirectional: false,
+  createChannel: false,   // ticked = a channel for this device is created in the Open Integration Engine when it is added
   // Open Integration Engine connection for this device; a field left empty uses the Integration Hub's own setting
-  engineUrl: '', engineUser: '', enginePassword: '', engineVerifyTls: false, engineTemplateChannel: '', engineFirstListenPort: '',
-  hubPublicUrl: '', engineChannelUrl: '' };
+  engineUrl: '', engineUser: '', enginePassword: '', engineVerifyTls: false, engineFirstListenPort: '',
+  engineChannelUrl: '' };
+
+// Protocols the Integration Hub has a channel template for; other protocols need a channel made by hand in the engine
+const TEMPLATED = ['HL7V2', 'HL7V3', 'FHIR'];
 
 export default function Analyzers() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error' | 'warn'; text: string } | null>(null);
@@ -34,12 +38,14 @@ export default function Analyzers() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault(); setMsg(null);
-    const body: any = { ...form, branchId: Number(form.branchId), port: form.port ? Number(form.port) : null,
+    const body: any = { ...form, branchId: Number(form.branchId),
       engineFirstListenPort: form.engineFirstListenPort ? Number(form.engineFirstListenPort) : null };
+    body.createChannel = creating;
     Object.keys(body).forEach((k) => { if (body[k] === '') delete body[k]; });
     try {
       const r = await api(API.laboratory, '/api/analyzers', { body });
-      setMsg({ kind: r.analyzer.channelStatus === 'PROVISIONED' ? 'ok' : 'warn', text: `${r.analyzer.analyzerCode} added. Channel ${r.analyzer.channelStatus}: ${r.provisioningMessage}` });
+      const done = r.analyzer.channelStatus === 'PROVISIONED' || !creating;
+      setMsg({ kind: done ? 'ok' : 'warn', text: creating ? `${r.analyzer.analyzerCode} added. Channel ${r.analyzer.channelStatus}: ${r.provisioningMessage}` : `${r.analyzer.analyzerCode} added. ${r.provisioningMessage}` });
       setForm({ ...blank, branchId: form.branchId }); load();
     } catch (err) { bad(err); }
   }
@@ -57,6 +63,8 @@ export default function Analyzers() {
     } catch (err) { bad(err); }
   }
 
+  const creating = form.createChannel && TEMPLATED.includes(form.interfaceProtocol);
+  const isHttp = form.interfaceProtocol !== 'HL7V2';
   const params = tests.flatMap((t) => t.parameters.map((p: any) => ({ ...p, testName: t.serviceName })));
 
   return (
@@ -75,23 +83,25 @@ export default function Analyzers() {
             <Field label="Lab section"><select value={form.labSection} onChange={set('labSection')}><option>HEMATOLOGY</option><option>BIOCHEMISTRY</option><option>IMMUNOLOGY</option><option>MICROBIOLOGY</option></select></Field>
             <Field label="Protocol"><select value={form.interfaceProtocol} onChange={set('interfaceProtocol')}><option value="HL7V2">HL7 v2</option><option value="HL7V3">HL7 v3</option><option value="FHIR">FHIR</option><option value="ASTM">ASTM</option></select></Field>
             <Field label="Sending application id"><input value={form.sendingApplicationId} onChange={set('sendingApplicationId')} placeholder="what the device sends in MSH-3 (default: code)" /></Field>
-            <Field label="Host"><input value={form.hostAddress} onChange={set('hostAddress')} placeholder="192.168.1.50" /></Field>
-            <Field label="Port"><input type="number" value={form.port} onChange={set('port')} placeholder="auto" /></Field>
             <label className="row" style={{ alignSelf: 'end' }}><input type="checkbox" style={{ width: 'auto' }} checked={form.isBidirectional} onChange={(e) => setForm({ ...form, isBidirectional: e.target.checked })} />bidirectional</label>
           </div>
           <h3 style={{ marginTop: 16 }}>Open Integration Engine</h3>
-          <p className="muted">Where this device's channel is created and where its messages are sent. A field left empty uses the Integration Hub's own setting.</p>
+          <label className="row"><input type="checkbox" style={{ width: 'auto' }} checked={form.createChannel} disabled={!TEMPLATED.includes(form.interfaceProtocol)} onChange={(e) => setForm({ ...form, createChannel: e.target.checked })} />Create a channel for this device in the Open Integration Engine</label>
+          {!TEMPLATED.includes(form.interfaceProtocol)
+            ? <p className="muted">There is no channel template for {form.interfaceProtocol}. Create its channel in the engine yourself; the device is only saved here.</p>
+            : creating
+              ? <p className="muted">When the device is added, the channel <strong>HIMS-{form.analyzerCode || '<analyzer code>'}</strong> is created from the {form.interfaceProtocol} template and deployed: {isHttp ? `an HTTP listener on the listen port, path /${(form.analyzerCode || 'analyzer-code').toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : 'a TCP/MLLP listener on the listen port'}. That port must be free in the engine and published on its server.</p>
+              : <p className="muted">Not ticked: no channel is created. Enter the details of the engine and of the channel this device already uses; they are saved with the device.</p>}
           <div className="grid">
-            <Field label="Engine URL"><input value={form.engineUrl} onChange={set('engineUrl')} placeholder="https://engine-host:8443" /></Field>
-            <Field label="Engine user"><input value={form.engineUser} onChange={set('engineUser')} placeholder="admin" autoComplete="off" /></Field>
-            <Field label="Engine password"><input type="password" value={form.enginePassword} onChange={set('enginePassword')} autoComplete="new-password" /></Field>
-            <Field label="Template channel"><input value={form.engineTemplateChannel} onChange={set('engineTemplateChannel')} placeholder="HIMS-Analyzer-Template" /></Field>
-            <Field label="First listen port"><input type="number" value={form.engineFirstListenPort} onChange={set('engineFirstListenPort')} placeholder="used when Port is empty" /></Field>
-            <Field label="Hub public URL"><input value={form.hubPublicUrl} onChange={set('hubPublicUrl')} placeholder="http://hub-host:5011" /></Field>
-            <Field label="Engine channel URL"><input value={form.engineChannelUrl} onChange={set('engineChannelUrl')} placeholder="http://engine-host:6665/hims-lab or mllp://engine-host:6661" /></Field>
+            <Field label={creating ? 'Engine URL *' : 'Engine URL'}><input required={creating} value={form.engineUrl} onChange={set('engineUrl')} placeholder="https://engine-host:8443" /></Field>
+            <Field label={creating ? 'Engine user *' : 'Engine user'}><input required={creating} value={form.engineUser} onChange={set('engineUser')} placeholder="admin" autoComplete="off" /></Field>
+            <Field label={creating ? 'Engine password *' : 'Engine password'}><input required={creating} type="password" value={form.enginePassword} onChange={set('enginePassword')} autoComplete="new-password" /></Field>
+            <Field label="Listen port"><input type="number" value={form.engineFirstListenPort} onChange={set('engineFirstListenPort')} placeholder={creating ? 'port inside the engine, e.g. 6663 (auto if empty)' : "the channel's port inside the engine"} /></Field>
+            <Field label="Engine channel URL"><input value={form.engineChannelUrl} onChange={set('engineChannelUrl')} placeholder="http://engine-host:port/path or mllp://engine-host:port" /></Field>
             <label className="row" style={{ alignSelf: 'end' }}><input type="checkbox" style={{ width: 'auto' }} checked={form.engineVerifyTls} onChange={(e) => setForm({ ...form, engineVerifyTls: e.target.checked })} />verify engine TLS certificate</label>
           </div>
-          <div style={{ marginTop: 12 }}><button>Add device &amp; create integration channel</button></div>
+          <p className="muted">Engine channel URL: the address, as reached from outside the engine server, that test messages for this device are sent to.</p>
+          <div style={{ marginTop: 12 }}><button>{creating ? 'Add device & create integration channel' : 'Add device'}</button></div>
         </form>
       </Card>
 

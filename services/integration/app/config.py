@@ -1,4 +1,4 @@
-"""All settings come from environment variables (see .env.example); defaults suit a local developer machine."""
+"""All settings come from environment variables (services/integration/.env); defaults suit a local developer machine."""
 import os
 from dataclasses import dataclass
 
@@ -12,6 +12,9 @@ class Settings:
     database_url: str = os.getenv("DATABASE_URL", "postgresql://hims:hims@localhost:5432/hims_integration")
     rabbitmq_url: str = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/%2F")
     rabbitmq_enabled: bool = _bool("RABBITMQ_ENABLED", True)
+    # RabbitMQ management (HTTP) API as the Open Integration Engine reaches it, e.g. http://rabbitmq:15672. Channels created for a
+    # device publish through it, with the user/password of RABBITMQ_URL. Empty = channels cannot be created from the built-in templates.
+    rabbitmq_api_url: str = os.getenv("RABBITMQ_API_URL", "").rstrip("/")
 
     # RabbitMQ topology (shared with the .NET services for hims.events)
     events_exchange: str = os.getenv("EVENTS_EXCHANGE", "hims.events")
@@ -29,8 +32,7 @@ class Settings:
     engine_user: str = os.getenv("ENGINE_USER", "admin")
     engine_password: str = os.getenv("ENGINE_PASSWORD", "admin")
     engine_verify_tls: bool = _bool("ENGINE_VERIFY_TLS", False)
-    engine_template_channel: str = os.getenv("ENGINE_TEMPLATE_CHANNEL", "HIMS-Analyzer-Template")   # channel cloned for every analyzer
-    engine_first_listen_port: int = int(os.getenv("ENGINE_FIRST_LISTEN_PORT", "6661"))
+    engine_first_listen_port: int = int(os.getenv("ENGINE_FIRST_LISTEN_PORT", "6661"))   # + analyzer id, when no listen port is entered for the device
     hub_public_url: str = os.getenv("HUB_PUBLIC_URL", "http://localhost:5011").rstrip("/")   # where the engine's HTTP Sender posts
     engine_channel_url: str = os.getenv("ENGINE_CHANNEL_URL", "").rstrip("/")  # the deployed channel's own HTTP endpoint, e.g. http://103.169.179.22:50057/hims-lab
     

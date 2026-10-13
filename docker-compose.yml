@@ -73,6 +73,7 @@ services:
       DATABASE_URL: postgresql://hims:hims@postgres:5432/hims_integration
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@${RABBITMQ_HOST:-rabbitmq}:5672/%2F
       HAPI_FHIR_URL: ${HAPI_FHIR_URL:-http://103.169.179.22:50060/fhir}
+      RABBITMQ_API_URL: ${RABBITMQ_API_URL:-http://${RABBITMQ_HOST:-rabbitmq}:15672}   # as the Open Integration Engine reaches it
       ENGINE_URL: ${ENGINE_URL:-}
       ENGINE_USER: ${ENGINE_USER:-admin}
       ENGINE_PASSWORD: ${ENGINE_PASSWORD:-admin}

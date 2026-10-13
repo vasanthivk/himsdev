@@ -1,17 +1,19 @@
 """
 Open Integration Engine (Mirth Connect compatible REST API) provisioning.
 
-"Add a device" in Laboratory ends here. Instead of hand-building channel XML, the hub CLONES a template channel that you create
-once in the engine (see docs/ENGINE_TEMPLATE.md), replaces the ${PLACEHOLDERS} in it, creates/updates the channel named
-HIMS-<analyzer code> and deploys it. The channel listens for the instrument (HL7 v2 over MLLP, HL7 v3, FHIR ...) and publishes the
-raw message to RabbitMQ (exchange hims.integration, routing key lab.results.<code>) where this hub's device consumer picks it up.
+"Add a device" in Laboratory ends here when "create channel" is ticked. The hub takes the channel template for the device's
+protocol (app/channel_templates: HL7 v2, HL7 v3, FHIR), replaces the ${PLACEHOLDERS} in it, creates/updates the channel named HIMS-<analyzer code> and deploys it (docs/ENGINE_TEMPLATE.md).
+The channel listens for the instrument (HL7 v2 over MLLP; HL7 v3 and FHIR over HTTP) and publishes the raw message to RabbitMQ
+(exchange hims.integration, routing key lab.results.<code>) where this hub's device consumer picks it up.
 """
 import logging
+import pathlib
 import re
 import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import unquote, urlparse
 from xml.sax.saxutils import escape
 
 import requests
@@ -19,6 +21,11 @@ import requests
 from .config import settings
 
 log = logging.getLogger("hub.engine")
+
+# One channel template per protocol, made from the working channels in oie_channels/ (see docs/ENGINE_TEMPLATE.md).
+TEMPLATE_DIR = pathlib.Path(__file__).parent / "channel_templates"
+BUILT_IN_TEMPLATES = {"HL7V2": "hl7v2.xml", "HL7V3": "hl7v3.xml", "FHIR": "fhir.xml"}
+HTTP_PROTOCOLS = ("HL7V3", "FHIR")      # these channels are HTTP Listeners (port + context path); HL7 v2 is a TCP/MLLP listener (port only)
 
 
 class EngineError(RuntimeError):
@@ -37,22 +44,16 @@ class EngineConfig:
     user: str
     password: str
     verify_tls: bool
-    template_channel: str
-    first_listen_port: int
-    hub_public_url: str
+    listen_port: Optional[int]      # the port the device's channel listens on; None = ENGINE_FIRST_LISTEN_PORT + analyzer id
 
     @classmethod
     def resolve(cls, *, url: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None,
-                verify_tls: Optional[bool] = None, template_channel: Optional[str] = None, first_listen_port: Optional[int] = None,
-                hub_public_url: Optional[str] = None) -> "EngineConfig":
+                verify_tls: Optional[bool] = None, listen_port: Optional[int] = None) -> "EngineConfig":
         def text(value: Optional[str], default: str) -> str:
             return value.strip() if value and value.strip() else default
         return cls(url=text(url, settings.engine_url).rstrip("/"), user=text(user, settings.engine_user),
                    password=password if password else settings.engine_password,
-                   verify_tls=settings.engine_verify_tls if verify_tls is None else verify_tls,
-                   template_channel=text(template_channel, settings.engine_template_channel),
-                   first_listen_port=first_listen_port or settings.engine_first_listen_port,
-                   hub_public_url=text(hub_public_url, settings.hub_public_url).rstrip("/"))
+                   verify_tls=settings.engine_verify_tls if verify_tls is None else verify_tls, listen_port=listen_port or None)
 
 
 class OpenIntegrationEngine:
@@ -95,14 +96,27 @@ class OpenIntegrationEngine:
                 out[strings[1]] = strings[0]
         return out
 
-    def get_channel_xml(self, channel_id: str) -> str:
-        return self.request("GET", f"/channels/{channel_id}").text
+    def listen_ports(self) -> dict:
+        """{listen port: channel name} of every channel in the engine, so a new channel is not put on a port that is taken."""
+        root = ET.fromstring(self.request("GET", "/channels").text)
+        out = {}
+        for channel in root.iter("channel"):
+            port = channel.findtext("sourceConnector/properties/listenerConnectorProperties/port")
+            if port and port.strip().isdigit():
+                out[int(port)] = channel.findtext("name") or ""
+        return out
 
+    # Creating/updating a channel takes XML but answers "true"/"false" as text/plain or JSON only (asking for XML gets HTTP 406).
     def create_channel(self, xml: str) -> None:
-        self.request("POST", "/channels", data=xml.encode("utf-8"), headers={"Content-Type": "application/xml"})
+        r = self.request("POST", "/channels", data=xml.encode("utf-8"), headers={"Content-Type": "application/xml", "Accept": "text/plain"})
+        if r.text.strip().lower() == "false":
+            raise EngineError("The engine refused to create the channel (it answered false)")
 
     def update_channel(self, channel_id: str, xml: str) -> None:
-        self.request("PUT", f"/channels/{channel_id}", params={"override": "true"}, data=xml.encode("utf-8"), headers={"Content-Type": "application/xml"})
+        r = self.request("PUT", f"/channels/{channel_id}", params={"override": "true"}, data=xml.encode("utf-8"),
+                         headers={"Content-Type": "application/xml", "Accept": "text/plain"})
+        if r.text.strip().lower() == "false":
+            raise EngineError("The engine refused to update the channel (it answered false)")
 
     def deploy(self, channel_id: str) -> None:
         self.request("POST", f"/channels/{channel_id}/_deploy", params={"returnErrors": "true"})
@@ -118,32 +132,56 @@ def render_template(template_xml: str, channel_id: str, channel_name: str, value
     return xml
 
 
-def provision_interface(*, analyzer_id: int, code: str, name: str, protocol: str, sending_app: Optional[str], host: Optional[str],
-                        port: Optional[int], engine: Optional[OpenIntegrationEngine] = None, config: Optional[EngineConfig] = None) -> dict:
+def rabbitmq_publish_target() -> Optional[dict]:
+    """Where a channel's HTTP Sender publishes: RabbitMQ's management API as the engine reaches it. None when RABBITMQ_API_URL is not set."""
+    if not settings.rabbitmq_api_url:
+        return None
+    amqp = urlparse(settings.rabbitmq_url)
+    vhost = amqp.path.lstrip("/") or "%2F"       # already percent-encoded in the AMQP URL ("/" is %2F)
+    return {"RABBITMQ_PUBLISH_URL": f"{settings.rabbitmq_api_url}/api/exchanges/{vhost}/{settings.integration_exchange}/publish",
+            "RABBITMQ_USER": unquote(amqp.username or "guest"), "RABBITMQ_PASSWORD": unquote(amqp.password or "guest")}
+
+
+def provision_interface(*, analyzer_id: int, code: str, name: str, protocol: str, sending_app: Optional[str],
+                        engine: Optional[OpenIntegrationEngine] = None, config: Optional[EngineConfig] = None) -> dict:
     """Returns {channelId, routingKey, status: PROVISIONED|PENDING|FAILED, message}. Never raises: Laboratory stores the status."""
     routing_key = f"lab.results.{slug(code)}"
     config = config or (engine.config if engine else EngineConfig.resolve())
+
+    def result(status: str, message: str, channel_id: str = "") -> dict:
+        return {"channelId": channel_id, "routingKey": routing_key, "status": status, "message": message}
+
     if not config.url:
-        return {"channelId": "", "routingKey": routing_key, "status": "PENDING",
-                "message": "No engine URL was given for this device (and ENGINE_URL is not set), so no channel was created. Configure the "
-                           f"engine channel manually to publish to exchange '{settings.integration_exchange}' with routing key "
-                           f"'{routing_key}', or enter the engine URL and re-provision."}
+        return result("PENDING", "No engine URL was given for this device (and ENGINE_URL is not set), so no channel was created. Configure the "
+                                 f"engine channel manually to publish to exchange '{settings.integration_exchange}' with routing key "
+                                 f"'{routing_key}', or enter the engine URL and re-provision.")
     engine = engine or OpenIntegrationEngine(config=config)
     channel_name = f"HIMS-{code}"
+    listen_port = config.listen_port or settings.engine_first_listen_port + analyzer_id
+    context_path = f"/{slug(code)}"
+    values = {
+        "ANALYZER_ID": analyzer_id, "ANALYZER_CODE": code, "ANALYZER_NAME": name, "PROTOCOL": protocol,
+        "SENDING_APPLICATION_ID": sending_app or code, "LISTEN_PORT": listen_port, "CONTEXT_PATH": context_path,
+        "ROUTING_KEY": routing_key, "RABBITMQ_URI": settings.rabbitmq_url, "RABBITMQ_EXCHANGE": settings.integration_exchange,
+        "HUB_INBOUND_URL": f"{settings.hub_public_url}/api/inbound?analyzer={code}", "CHANNEL_NAME": channel_name,
+    }
     try:
         ids = engine.channel_ids_by_name()
-        if config.template_channel not in ids:
-            return {"channelId": "", "routingKey": routing_key, "status": "FAILED",
-                    "message": f"Template channel '{config.template_channel}' was not found in the engine. Create it once (docs/ENGINE_TEMPLATE.md)."}
-        template = engine.get_channel_xml(ids[config.template_channel])
+        if protocol not in BUILT_IN_TEMPLATES:
+            return result("FAILED", f"There is no built-in channel template for protocol {protocol} (available: "
+                                    f"{', '.join(BUILT_IN_TEMPLATES)}). Create the channel in the engine yourself.")
+        target = rabbitmq_publish_target()
+        if target is None:
+            return result("FAILED", "RABBITMQ_API_URL is not set for the Integration Hub, so the channel would have nowhere to publish. "
+                                    "Set it to RabbitMQ's management API address as the engine reaches it (services/integration/.env).")
+        values.update(target)
+        template = (TEMPLATE_DIR / BUILT_IN_TEMPLATES[protocol]).read_text(encoding="utf-8")
         channel_id = ids.get(channel_name) or str(uuid.uuid4())
-        xml = render_template(template, channel_id, channel_name, {
-            "ANALYZER_ID": analyzer_id, "ANALYZER_CODE": code, "ANALYZER_NAME": name, "PROTOCOL": protocol,
-            "SENDING_APPLICATION_ID": sending_app or code, "DEVICE_HOST": host or "", "LISTEN_PORT": port or config.first_listen_port + analyzer_id,
-            "ROUTING_KEY": routing_key, "RABBITMQ_URI": settings.rabbitmq_url, "RABBITMQ_EXCHANGE": settings.integration_exchange,
-            "HUB_INBOUND_URL": f"{config.hub_public_url}/api/inbound?analyzer={code}",
-        })
-        import pathlib
+        values["CHANNEL_ID"] = channel_id
+        xml = render_template(template, channel_id, channel_name, values)
+        taken_by = engine.listen_ports().get(listen_port)
+        if taken_by and taken_by != channel_name:
+            return result("FAILED", f"Port {listen_port} is already used by channel '{taken_by}' in the engine. Enter a free listen port.")
         pathlib.Path("data").mkdir(exist_ok=True)
         pathlib.Path(f"data/last_rendered_channel_{code}.xml").write_text(xml, encoding="utf-8")
         log.info("Wrote rendered channel XML to data/last_rendered_channel_%s.xml for inspection", code)
@@ -152,8 +190,10 @@ def provision_interface(*, analyzer_id: int, code: str, name: str, protocol: str
         else:
             engine.create_channel(xml)
         engine.deploy(channel_id)
-        log.info("Provisioned engine channel %s (%s)", channel_name, channel_id)
-        return {"channelId": channel_id, "routingKey": routing_key, "status": "PROVISIONED", "message": f"Channel '{channel_name}' deployed"}
-    except (EngineError, requests.RequestException, ET.ParseError) as e:
+        log.info("Provisioned engine channel %s (%s) on port %s", channel_name, channel_id, listen_port)
+        where = f"port {listen_port}" + (f", path {context_path}" if protocol in HTTP_PROTOCOLS else "")
+        return result("PROVISIONED", f"Channel '{channel_name}' {'updated' if channel_name in ids else 'created'} and deployed, listening on {where} "
+                                     "inside the engine", channel_id)
+    except (EngineError, requests.RequestException, ET.ParseError, OSError) as e:
         log.warning("Engine provisioning failed for %s: %s", code, e)
-        return {"channelId": "", "routingKey": routing_key, "status": "FAILED", "message": str(e)[:400]}
+        return result("FAILED", str(e)[:400])
