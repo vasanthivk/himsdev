@@ -39,5 +39,5 @@ logs/**/*.log
 *.zip
 
 # ---------- Config files: frontend and services folders ----------
-config_files/frontend/
-config_files/services/
+config/frontend/
+config/services/

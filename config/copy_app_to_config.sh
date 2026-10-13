@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Collects the config files (.env, appsettings.json) from every service and frontend app
-# into config_files/, mirroring the folder structure of services/ and frontend/.
-# Existing config_files/services and config_files/frontend folders are deleted first.
+# into config/, mirroring the folder structure of services/ and frontend/.
+# Existing config/services and config/frontend folders are deleted first.
 #
-# Usage (from anywhere):  bash config_files/config_files.sh
+# Usage (from anywhere):  bash config/copy_app_to_config.sh
 
 set -euo pipefail
 
@@ -16,7 +16,7 @@ for area in services frontend; do
   dest="$CONFIG_DIR/$area"
   if [ -d "$dest" ]; then
     rm -rf "$dest"
-    echo "Deleted config_files/$area"
+    echo "Deleted config/$area"
   fi
 done
 
@@ -32,7 +32,7 @@ for area in services frontend; do
     for file in "${CONFIG_FILE_NAMES[@]}"; do
       if [ -f "$dir$file" ]; then
         cp "$dir$file" "$dest_root/$name/$file"
-        echo "  $area/$name/$file -> config_files/$area/$name/$file"
+        echo "  $area/$name/$file -> config/$area/$name/$file"
       fi
     done
   done

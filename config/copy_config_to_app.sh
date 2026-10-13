@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Copies the config files (.env, appsettings.json) from config_files/ back into the applications:
-#   config_files/services/<app>/  ->  services/<app>/
-#   config_files/frontend/<app>/  ->  frontend/<app>/
+# Copies the config files (.env, appsettings.json) from config/ back into the applications:
+#   config/services/<app>/  ->  services/<app>/
+#   config/frontend/<app>/  ->  frontend/<app>/
 # Existing config files in the application folders are overwritten.
 #
-# Usage (from anywhere):  bash config_files/copy_config_files_to_app.sh
+# Usage (from anywhere):  bash config/copy_config_to_app.sh
 
 set -euo pipefail
 
@@ -18,7 +18,7 @@ for area in services frontend; do
   dest_root="$ROOT_DIR/$area"
 
   if [ ! -d "$src_root" ]; then
-    echo "WARNING: config_files/$area not found, skipped" >&2
+    echo "WARNING: config/$area not found, skipped" >&2
     continue
   fi
 
@@ -35,7 +35,7 @@ for area in services frontend; do
     for file in "${CONFIG_FILE_NAMES[@]}"; do
       if [ -f "$dir$file" ]; then
         cp "$dir$file" "$dest_root/$name/$file"
-        echo "  config_files/$area/$name/$file -> $area/$name/$file"
+        echo "  config/$area/$name/$file -> $area/$name/$file"
       fi
     done
   done
