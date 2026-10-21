@@ -4,7 +4,7 @@
 #   config/frontend/<app>/  ->  frontend/<app>/
 # Existing config files in the application folders are overwritten.
 #
-# Usage (from anywhere):  bash config/copy_config_to_app.sh
+# Usage (from anywhere):  bash config/copy_to_app.sh
 
 set -euo pipefail
 

@@ -56,7 +56,7 @@ do_start() {
 
   if [ ! -f "$HUB_DIR/.env" ]; then
     echo "$HUB_DIR/.env not found. Create it first (settings are listed in $HUB_DIR/app/config.py),"
-    echo "or restore the saved copy:  ./config_files/copy_config_files_to_app.sh"
+    echo "or restore the saved copy:  bash config/copy_to_app.sh"
     exit 1
   fi
 

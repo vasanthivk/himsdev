@@ -2,12 +2,12 @@
 
 A single place holding a copy of the configuration files (`.env`, `appsettings.json`) of every HIMS service and frontend app, so they can be reviewed, backed up, or shared without digging through each project folder.
 
-The files here are **copies**. The applications read their config from their own folders; editing a file here changes nothing until it is copied back with `copy_config_to_app.sh`.
+The files here are **copies**. The applications read their config from their own folders; editing a file here changes nothing until it is copied back with `copy_to_app.sh`.
 
 | Script | Direction | Overwrites |
 | --- | --- | --- |
-| `copy_app_to_config.sh` | `services/`, `frontend/` → `config/` | Deletes and rebuilds `config/services/` and `config/frontend/` |
-| `copy_config_to_app.sh` | `config/` → `services/`, `frontend/` | The `.env` / `appsettings.json` in each application folder |
+| `copy_to_config.sh` | `services/`, `frontend/` → `config/` | Deletes and rebuilds `config/services/` and `config/frontend/` |
+| `copy_to_app.sh` | `config/` → `services/`, `frontend/` | The `.env` / `appsettings.json` in each application folder |
 
 Both scripts are Bash (use Git Bash on Windows) and can be run from any directory: they locate the repository root from their own location.
 
@@ -17,8 +17,8 @@ Both scripts are Bash (use Git Bash on Windows) and can be run from any director
 
 ```
 config/
-├── copy_app_to_config.sh   # apps -> config
-├── copy_config_to_app.sh   # config -> apps
+├── copy_to_config.sh   # apps -> config
+├── copy_to_app.sh      # config -> apps
 ├── CONFIG_README.md
 ├── services/
 │   ├── back-office/appsettings.json
@@ -50,13 +50,13 @@ The .NET services are configured through `appsettings.json`; the integration ser
 From the repository root:
 
 ```bash
-bash config/copy_app_to_config.sh
+bash config/copy_to_config.sh
 ```
 
 From inside `config/`:
 
 ```bash
-bash copy_app_to_config.sh
+bash copy_to_config.sh
 ```
 
 The script:
@@ -74,13 +74,13 @@ Because step 1 wipes the previous copies, any edit made directly in `config/` th
 Use this on a fresh clone, or after editing a config file here. From the repository root:
 
 ```bash
-bash config/copy_config_to_app.sh
+bash config/copy_to_app.sh
 ```
 
 From inside `config/`:
 
 ```bash
-bash copy_config_to_app.sh
+bash copy_to_app.sh
 ```
 
 For each sub folder of `config/services/` and `config/frontend/`, the script copies `.env` and `appsettings.json`, when present, into the folder of the same name under `services/` or `frontend/`, and prints each file copied.

@@ -3,7 +3,7 @@
 # into config/, mirroring the folder structure of services/ and frontend/.
 # Existing config/services and config/frontend folders are deleted first.
 #
-# Usage (from anywhere):  bash config/copy_app_to_config.sh
+# Usage (from anywhere):  bash config/copy_to_config.sh
 
 set -euo pipefail
 
