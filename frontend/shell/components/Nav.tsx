@@ -7,7 +7,7 @@ const links = [
   { href: '/laboratory', label: 'Laboratory', key: 'laboratory' },
 ];
 
-export default function Nav({ active }: { active: string }) {
+export default function Nav({ active, user }: { active: string; user?: React.ReactNode }) {
   return (
     <header className="nav">
       <a className="brand" href="/">HIMS <small>Dr Reddis HealthCare</small></a>
@@ -16,6 +16,7 @@ export default function Nav({ active }: { active: string }) {
           <a key={l.key} href={l.href} className={l.key === active ? 'active' : ''}>{l.label}</a>
         ))}
       </nav>
+      {user}
     </header>
   );
 }

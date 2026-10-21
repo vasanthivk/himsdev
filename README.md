@@ -1,7 +1,7 @@
 # HIMS - Dr Reddis HealthCare (reference implementation)
 
 Microservices named exactly as in your data model (`database/DATA_MODEL_README.md`), one PostgreSQL database each, events over
-**RabbitMQ only**. .NET 8 backends, one Python backend (Integration Hub), Next.js multi-zone frontends.
+**RabbitMQ only**. .NET 10 backends, one Python backend (Integration Hub), Next.js multi-zone frontends.
 
 ## The workflow
 1. **Add a device** - Laboratory > Analyzers. Laboratory saves `lab.analyzer`; when asked to, the Python Integration Hub creates the device's channel in the Open Integration Engine from the template for its protocol (`docs/ENGINE_TEMPLATE.md`).

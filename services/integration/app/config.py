@@ -40,7 +40,8 @@ class Settings:
     log_dir: str = os.getenv("LOG_DIR", "../../logs/integration")   # daily files dd-MM-yyyy.log; default = <repo>/logs/integration when run from services/integration
     device_timezone: str = os.getenv("DEVICE_TIMEZONE", "Asia/Kolkata")   # HL7 timestamps without an offset are in this zone
     enable_simulator: bool = _bool("ENABLE_SIMULATOR", True)
-    cors_origins: tuple = tuple(o for o in os.getenv("CORS_ORIGINS", ",".join("http://localhost:%d" % p for p in [3000] + list(range(3001, 3014)))).split(",") if o)
+    cors_origins: tuple = tuple(o for o in os.getenv("CORS_ORIGINS", ",".join(["https://localhost:3000"] + ["http://localhost:%d" % p for p in [3000] + list(range(3001, 3014))])).split(",") if o)
+    cors_origin_regex: str = os.getenv("CORS_ORIGIN_REGEX", r"https://[a-z0-9-]+\.localhost:3000")   # every tenant subdomain, e.g. https://apollo.localhost:3000
 
 
 settings = Settings()

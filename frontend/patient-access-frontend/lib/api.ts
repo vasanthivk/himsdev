@@ -1,4 +1,7 @@
-// Shared by every zone (copied into each one - see frontend/README.md). Each microservice is called directly from the browser.
+import { getAccessToken } from '@/lib/auth';
+
+// Shared by every zone (copied into each one - see frontend/README.md). Each microservice is called directly from the browser,
+// with the WSO2 Identity Server access token as a bearer token.
 export const API = {
   patientAccess: process.env.NEXT_PUBLIC_PATIENT_ACCESS_API ?? 'http://localhost:5001',
   clinicalCare: process.env.NEXT_PUBLIC_CLINICAL_CARE_API ?? 'http://localhost:5002',
@@ -26,12 +29,17 @@ export async function api<T = any>(base: string, path: string, opts: Opts = {}):
   const attempts = opts.retry409 ? 7 : 1;
   for (let i = 0; i < attempts; i++) {
     const hasBody = opts.body !== undefined;
+    const headers: Record<string, string> = {};
+    if (hasBody) headers['Content-Type'] = 'application/json';
+    const token = await getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(base + path, {
       method: opts.method ?? (hasBody ? 'POST' : 'GET'),
-      headers: hasBody ? { 'Content-Type': 'application/json' } : undefined,
+      headers,
       body: hasBody ? JSON.stringify(opts.body) : undefined,
     });
     if (res.status === 409 && i < attempts - 1) { await sleep(1500); continue; }
+    if (res.status === 401) throw new ApiError(401, 'Not signed in or the session has expired - sign out and sign in again.');
     const text = await res.text();
     let data: any = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }

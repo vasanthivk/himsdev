@@ -20,6 +20,15 @@ public static class SwaggerExtensions
 
             // Several services map tables with the same short name in different schemas; full names avoid schema collisions.
             c.CustomSchemaIds(t => t.FullName ?? t.Name);
+
+            // "Authorize" button: paste a WSO2 Identity Server access token to call the API when Auth:Enabled.
+            var bearer = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT", Description = "WSO2 Identity Server access token",
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" },
+            };
+            c.AddSecurityDefinition("Bearer", bearer);
+            c.AddSecurityRequirement(new OpenApiSecurityRequirement { [bearer] = Array.Empty<string>() });
         });
         return services;
     }

@@ -1,5 +1,8 @@
 // Patient Access zone: served by the shell under /patient-access. basePath makes Next.js prefix routes and assets with it.
-module.exports = { basePath: '/patient-access', eslint: { ignoreDuringBuilds: true } };
+module.exports = {
+  basePath: '/patient-access',
+  eslint: { ignoreDuringBuilds: true },
+};
 
 // `node next.config.js <dev|start>` runs Next on PATIENT_ACCESS_PORT from .env. Next reads the port before it loads this config,
 // and npm scripts don't load .env, so the port is resolved here. When Next loads this file as its config, this block is skipped.

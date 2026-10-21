@@ -1,5 +1,8 @@
 // Laboratory zone: served by the shell under /laboratory.
-module.exports = { basePath: '/laboratory', eslint: { ignoreDuringBuilds: true } };
+module.exports = {
+  basePath: '/laboratory',
+  eslint: { ignoreDuringBuilds: true },
+};
 
 // `node next.config.js <dev|start>` runs Next on LABORATORY_PORT from .env. Next reads the port before it loads this config,
 // and npm scripts don't load .env, so the port is resolved here. When Next loads this file as its config, this block is skipped.

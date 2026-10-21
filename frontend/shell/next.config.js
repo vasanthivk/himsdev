@@ -26,6 +26,10 @@ if (require.main === module) {
   const command = process.argv[2];
   loadEnvConfig(__dirname, command === 'dev');
 
-  const child = spawn('next', [command, '-p', process.env.SHELL_PORT], { stdio: 'inherit', shell: true });
+  // SHELL_HTTPS=true serves `dev` on https with a self-signed localhost certificate - the WSO2 IS redirect URL is https.
+  const args = [command, '-p', process.env.SHELL_PORT];
+  if (command === 'dev' && process.env.SHELL_HTTPS === 'true') args.push('--experimental-https');
+
+  const child = spawn('next', args, { stdio: 'inherit', shell: true });
   child.on('exit', (code) => process.exit(code ?? 0));
 }

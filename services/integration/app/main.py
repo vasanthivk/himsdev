@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="HIMS Integration Hub", version="1.0",
               description="Anti-corruption layer: device interfaces (HL7 v2/v3, FHIR) via the Open Integration Engine, RabbitMQ events, FHIR R4 sync to HAPI.",
               lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins), allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins), allow_origin_regex=settings.cors_origin_regex or None, allow_methods=["*"], allow_headers=["*"])
 
 
 @app.get("/", include_in_schema=False)

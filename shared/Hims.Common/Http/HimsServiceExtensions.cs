@@ -39,8 +39,10 @@ public static class HimsServiceExtensions
         builder.Services.AddHimsSwagger(title, description);
 
         // Browser front-ends (micro-frontend zones) call each service directly; list their origins in Cors:Origins.
+        // Wildcards cover every tenant subdomain, e.g. "https://*.localhost:3000" allows https://apollo.localhost:3000.
         var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? new[] { "http://localhost:3000" };
-        builder.Services.AddCors(o => o.AddPolicy("frontends", p => p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod()));
+        builder.Services.AddCors(o => o.AddPolicy("frontends", p => p.WithOrigins(origins).SetIsOriginAllowedToAllowWildcardSubdomains().AllowAnyHeader().AllowAnyMethod()));
+        builder.AddHimsAuth();
 
         builder.Services.AddHostedService<OutboxRelay>();
         builder.Services.AddHostedService<EventConsumer<TDb>>();
@@ -81,14 +83,15 @@ public static class HimsServiceExtensions
         var info = app.Services.GetRequiredService<HimsServiceInfo>();
         app.UseHimsSwagger(info.Title);
         app.UseCors("frontends");
+        app.UseHimsAuth();
         app.MapControllers();
         app.MapGet("/health", async (TDb db) =>
         {
             var dbUp = false;
             try { dbUp = await db.Database.CanConnectAsync(); } catch { /* reported below */ }
             return Results.Json(new { service = info.Name, status = dbUp ? "healthy" : "degraded", database = dbUp });
-        });
-        app.MapGet("/", () => Results.Redirect("/swagger"));
+        }).AllowAnonymous();
+        app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
         return app;
     }
 }

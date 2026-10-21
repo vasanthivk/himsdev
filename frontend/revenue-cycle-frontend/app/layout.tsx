@@ -1,5 +1,5 @@
 import './globals.css';
-import Nav from '@/components/Nav';
+import AuthGate from '@/components/AuthGate';
 
 export const metadata = { title: 'Billing - HIMS' };
 
@@ -7,8 +7,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <Nav active="revenue-cycle" />
-        <main>{children}</main>
+        <AuthGate active="revenue-cycle">{children}</AuthGate>
       </body>
     </html>
   );
