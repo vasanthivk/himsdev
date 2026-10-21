@@ -65,12 +65,14 @@ function storeSession(t: any, prev?: Session): Session {
   return session;
 }
 
+// Token requests go to the shell's /api/auth/token, which adds the tenant's client secret (HTTP Basic) on the server and forwards
+// them to WSO2 IS - the secret never reaches the browser.
 async function tokenRequest(body: Record<string, string>) {
-  const cfg = await tenantConfig();
-  const res = await fetch(`${cfg.baseUrl}/oauth2/token`, {
+  await tenantConfig();
+  const res = await fetch('/api/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: cfg.clientId, ...body }),
+    body: new URLSearchParams(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error_description ?? data.error ?? `Token request failed (${res.status})`);
