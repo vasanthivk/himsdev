@@ -125,3 +125,39 @@ sourced.
 `start`/`restart` (without `--no-build`) stops immediately and shows the compiler error. Fix the
 code, then re-run — nothing was started on the broken build, so there's no stale process to clean
 up first.
+## HTTPS
+
+Every backend service also serves HTTPS on its HTTP port + 2000 (patient-access 5001 -> 7001, identity-org 5010 -> 7010,
+clinical-care 5002 -> 7002, laboratory 5003 -> 7003, revenue-cycle 5006 -> 7006, Integration Hub 5011 -> 7011). The HTTP
+ports stay as they are for the frontends, the laboratory -> hub calls and the Open Integration Engine.
+
+- .NET services: `Kestrel:Endpoints` in each `appsettings.json` (HTTP + HTTPS with `../../certs/hims-local.pfx`).
+- Integration Hub: `scripts/integration.sh` runs `python -m app.serve`, which serves HTTP and, when
+  `certs/hims-local.crt.pem` + `.key.pem` exist, HTTPS in the same process (background workers start once).
+
+`certs/` is git-ignored (private key). The certificate is self-signed, valid for `localhost`, `*.localhost`, `Admin.mshome.net`, `127.0.0.1`
+and `172.17.176.1` (the Windows host as seen from WSL). To recreate it (PowerShell, repo root):
+
+```powershell
+New-Item -ItemType Directory -Force certs | Out-Null
+$cert = New-SelfSignedCertificate -Subject "CN=hims-local" -CertStoreLocation Cert:\CurrentUser\My `
+  -TextExtension @("2.5.29.17={text}DNS=localhost&DNS=*.localhost&DNS=Admin.mshome.net&IPAddress=127.0.0.1&IPAddress=172.17.176.1", "2.5.29.37={text}1.3.6.1.5.5.7.3.1") `
+  -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(2)
+$pwd = ConvertTo-SecureString "changeit" -AsPlainText -Force
+Export-PfxCertificate -Cert $cert -FilePath certs\hims-local.pfx -Password $pwd
+Export-Certificate    -Cert $cert -FilePath certs\hims-local.cer
+```
+
+then, in Git Bash: `openssl pkcs12 -in certs/hims-local.pfx -passin pass:changeit -nokeys -clcerts -out certs/hims-local.crt.pem`
+and `openssl pkcs12 -in certs/hims-local.pfx -passin pass:changeit -nocerts -nodes -out certs/hims-local.key.pem`.
+
+WSO2 API Manager (in WSL) must trust it before its endpoints can use `https://Admin.mshome.net:70xx`. Use that name, not the IP:
+the gateway reverse-resolves the IP to `Admin.mshome.net` (the Windows host as WSL sees it; `<COMPUTERNAME>.mshome.net`) and checks
+the certificate against it - and the name keeps working when WSL's IP changes. Import (or after recreating: `keytool -delete -alias hims-local ...` first):
+
+```bash
+keytool -import -noprompt -alias hims-local -file /mnt/d/Projects/2026/himspoc/himspoc/certs/hims-local.cer \
+  -keystore ~/wso2am-4.6.0/repository/resources/security/client-truststore.jks -storepass wso2carbon
+```
+
+and restart API Manager.

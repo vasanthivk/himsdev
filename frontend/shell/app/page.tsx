@@ -1,15 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { API, api, errMsg } from '@/lib/api';
+import { API, api, errMsg, SERVICE } from '@/lib/api';
 import { Alert, Card } from '@/components/ui';
 
+// Health is read from each service directly (the gateway APIs don't publish /health).
 const services = [
-  { name: 'Patient Access', base: API.patientAccess },
-  { name: 'Clinical Care', base: API.clinicalCare },
-  { name: 'Laboratory', base: API.laboratory },
-  { name: 'Revenue Cycle', base: API.revenueCycle },
-  { name: 'Identity & Org', base: API.identityOrg },
-  { name: 'Integration Hub', base: API.integration },
+  { name: 'Patient Access', base: SERVICE.patientAccess },
+  { name: 'Clinical Care', base: SERVICE.clinicalCare },
+  { name: 'Laboratory', base: SERVICE.laboratory },
+  { name: 'Revenue Cycle', base: SERVICE.revenueCycle },
+  { name: 'Identity & Org', base: SERVICE.identityOrg },
+  { name: 'Integration Hub', base: SERVICE.integration },
 ];
 
 const steps = [

@@ -22,6 +22,8 @@ cd "$(dirname "$0")/.."
 
 HUB_DIR="services/integration"
 HUB_PORT=5011
+HUB_HTTPS_PORT=7011   # served too when certs/hims-local.crt.pem + .key.pem exist (see scripts/BACKEND_README.md)
+CERT_DIR="certs"
 mkdir -p logs/integration .pids
 
 # ------------------------------------------------------------------------------------------------ stop
@@ -36,11 +38,13 @@ do_stop() {
   else
     echo "  no pid file"
   fi
-  local port_pid; port_pid=$(netstat -ano 2>/dev/null | grep ":$HUB_PORT " | grep LISTENING | awk '{print $NF}' | head -1 || true)
-  if [ -n "$port_pid" ]; then
-    echo "  killing PID $port_pid still listening on port $HUB_PORT"
-    taskkill //PID "$port_pid" //F >/dev/null 2>&1 || true
-  fi
+  for port in "$HUB_PORT" "$HUB_HTTPS_PORT"; do
+    local port_pid; port_pid=$(netstat -ano 2>/dev/null | grep ":$port " | grep LISTENING | awk '{print $NF}' | head -1 || true)
+    if [ -n "$port_pid" ]; then
+      echo "  killing PID $port_pid still listening on port $port"
+      taskkill //PID "$port_pid" //F >/dev/null 2>&1 || true
+    fi
+  done
 }
 
 # ------------------------------------------------------------------------------------------------ start
@@ -76,11 +80,17 @@ do_start() {
     echo "  RABBITMQ_URL=$RABBITMQ_URL"
     echo "  DATABASE_URL=$DATABASE_URL"
 
-    nohup uvicorn app.main:app --port "$HUB_PORT" > "../../logs/integration/console.log" 2>&1 &
+    # HTTP on HUB_PORT, plus HTTPS on HUB_HTTPS_PORT when the certificate exists (app/serve.py runs both in one process).
+    export HUB_PORT HUB_HTTPS_PORT
+    if [ -f "../../$CERT_DIR/hims-local.crt.pem" ] && [ -f "../../$CERT_DIR/hims-local.key.pem" ]; then
+      export SSL_CERTFILE="${SSL_CERTFILE:-../../$CERT_DIR/hims-local.crt.pem}" SSL_KEYFILE="${SSL_KEYFILE:-../../$CERT_DIR/hims-local.key.pem}"
+    fi
+    nohup python -m app.serve > "../../logs/integration/console.log" 2>&1 &
     echo $! > "../../.pids/integration.pid"
   )
   echo "  started integration (pid $(cat .pids/integration.pid)) -> port $HUB_PORT"
   echo "Docs: http://localhost:$HUB_PORT/docs"
+  [ -f "$CERT_DIR/hims-local.crt.pem" ] && echo "HTTPS: https://localhost:$HUB_HTTPS_PORT/docs"
 
   if [ "$hide_logs" = "hide" ]; then
     echo "Logs hidden (--hidelogs). Watch later with: tail -F logs/integration/\$(date +%d-%m-%Y).log"
@@ -106,6 +116,8 @@ do_status() {
   else
     echo "  integration (port $HUB_PORT): NOT RESPONDING (HTTP $code)"
   fi
+  code=$(curl -sk -o /dev/null -w "%{http_code}" "https://localhost:$HUB_HTTPS_PORT/health" 2>/dev/null || echo "000")
+  [ "$code" = "200" ] && echo "  integration https (port $HUB_HTTPS_PORT): UP" || echo "  integration https (port $HUB_HTTPS_PORT): NOT RESPONDING (HTTP $code)"
 }
 
 # ------------------------------------------------------------------------------------------------ main

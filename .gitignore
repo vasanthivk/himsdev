@@ -41,3 +41,6 @@ logs/**/*.log
 # ---------- Config files: frontend and services folders ----------
 config/frontend/
 config/services/
+
+# ---------- Local TLS certificate for the backend HTTPS ports (contains the private key) ----------
+certs/

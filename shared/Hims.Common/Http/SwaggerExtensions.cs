@@ -21,14 +21,15 @@ public static class SwaggerExtensions
             // Several services map tables with the same short name in different schemas; full names avoid schema collisions.
             c.CustomSchemaIds(t => t.FullName ?? t.Name);
 
-            // "Authorize" button: paste a WSO2 Identity Server access token to call the API when Auth:Enabled.
-            var bearer = new OpenApiSecurityScheme
+            // "Authorize" button: when Auth:Enabled the service accepts only the backend JWT the WSO2 API Manager gateway sends.
+            var gatewayJwt = new OpenApiSecurityScheme
             {
-                Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT", Description = "WSO2 Identity Server access token",
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" },
+                Type = SecuritySchemeType.ApiKey, In = ParameterLocation.Header, Name = "X-JWT-Assertion",
+                Description = "Backend JWT signed by the WSO2 API Manager gateway (normally added by the gateway, not by callers)",
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "GatewayJwt" },
             };
-            c.AddSecurityDefinition("Bearer", bearer);
-            c.AddSecurityRequirement(new OpenApiSecurityRequirement { [bearer] = Array.Empty<string>() });
+            c.AddSecurityDefinition("GatewayJwt", gatewayJwt);
+            c.AddSecurityRequirement(new OpenApiSecurityRequirement { [gatewayJwt] = Array.Empty<string>() });
         });
         return services;
     }
