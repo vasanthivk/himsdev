@@ -2,15 +2,25 @@
 // sync-shared.sh). The shell serves every zone from one origin, so the session in sessionStorage is seen by all of them.
 // Multi-tenant: the WSO2 settings depend on the subdomain (apollo.localhost -> APOLLO_WSO2_*) and come from the shell's
 // /api/auth/config route at runtime. Each subdomain is its own browser origin, so tenants never share a session.
+//
+// WSO2_AUTHENTICATION=false (passed through by next.config.js): no WSO2 at all - users sign in on HIMS's own /login page with
+// username and password; Identity & Org issues a HIMS access token that every service validates.
+export const HIMS_LOGIN = process.env.WSO2_AUTHENTICATION === 'false';
+
+/** HIMS's own sign-in page (WSO2_AUTHENTICATION=false). */
+export const LOGIN_PATH = '/login';
+
 export type AuthConfig =
   | { status: 'ok'; tenant: string; baseUrl: string; clientId: string; scope: string }
   | { status: 'unknown-tenant'; host: string }
-  | { status: 'disabled' };
+  | { status: 'disabled' }
+  | { status: 'hims' };
 
 let configPromise: Promise<AuthConfig> | null = null;
 
-/** The WSO2 settings for this host (fetched once per page load). */
+/** The WSO2 settings for this host (fetched once per page load), or { status: 'hims' } when HIMS's own login is in use. */
 export function getAuthConfig(): Promise<AuthConfig> {
+  if (HIMS_LOGIN) return Promise.resolve({ status: 'hims' });
   configPromise ??= fetch('/api/auth/config', { cache: 'no-store' })
     .then((r) => { if (!r.ok) throw new Error(`Login configuration not available (${r.status})`); return r.json(); })
     .catch((e) => { configPromise = null; throw e; });
@@ -83,8 +93,28 @@ export const getUser = (): User | null => readSession()?.user ?? null;
 
 let refreshing: Promise<Session | null> | null = null;
 
+/** Stores the response of Identity & Org's POST /api/auth/login (WSO2_AUTHENTICATION=false). */
+export function storeHimsSession(r: { accessToken: string; expiresIn: number }) {
+  const c = jwtClaims(r.accessToken);
+  const roles = c.role ?? [];
+  const session: Session = {
+    accessToken: r.accessToken,
+    idToken: '',
+    expiresAt: Date.now() + (Number(r.expiresIn) - 30) * 1000,
+    user: { sub: c.sub, name: c.name ?? c.preferred_username, username: c.preferred_username, roles: Array.isArray(roles) ? roles : [roles] },
+  };
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+/** Only allows returning to a path on this site after login. */
+export const safeReturnTo = (to: string | null) => (to && to.startsWith('/') && !to.startsWith('//') ? to : '/');
+
 /** A valid access token (refreshed when expired), or null when the user has to sign in. */
 export async function getAccessToken(): Promise<string | null> {
+  if (HIMS_LOGIN) {   // HIMS tokens are not refreshed: after they expire the user signs in again
+    const s = readSession();
+    return s && s.expiresAt > Date.now() ? s.accessToken : null;
+  }
   const cfg = await getAuthConfig().catch(() => null);
   if (cfg?.status !== 'ok') return null;
   const s = readSession();
@@ -98,8 +128,9 @@ export async function getAccessToken(): Promise<string | null> {
   return (await refreshing)?.accessToken ?? null;
 }
 
-/** Sends the browser to the WSO2 IS login page; it comes back to CALLBACK_PATH and then to returnTo. */
+/** Sends the browser to the login page (WSO2 IS, or HIMS's own /login); afterwards it comes back to returnTo. */
 export async function login(returnTo = window.location.pathname + window.location.search) {
+  if (HIMS_LOGIN) { window.location.assign(`${LOGIN_PATH}?${new URLSearchParams({ returnTo })}`); return; }
   const cfg = await tenantConfig();
   const verifier = randomString(48), state = randomString(16), nonce = randomString(16);
   sessionStorage.setItem(LOGIN_KEY, JSON.stringify({ verifier, state, nonce, returnTo }));
@@ -120,12 +151,20 @@ export async function handleCallback(): Promise<string> {
   const tokens = await tokenRequest({ grant_type: 'authorization_code', code: p.get('code') ?? '', redirect_uri: redirectUri(), code_verifier: saved.verifier });
   if (jwtClaims(tokens.id_token).nonce !== saved.nonce) throw new Error('Login nonce mismatch - please sign in again.');
   storeSession(tokens);
-  const to: string = saved.returnTo ?? '/';
-  return to.startsWith('/') && !to.startsWith('//') ? to : '/';
+  return safeReturnTo(saved.returnTo);
 }
 
-/** Clears the local session and ends the tenant's WSO2 IS session (single logout). */
+/** Clears the local session and ends the server session: the tenant's WSO2 IS session, or the HIMS session in sec.user_session. */
 export async function logout() {
+  if (HIMS_LOGIN) {
+    const s = readSession();
+    sessionStorage.removeItem(SESSION_KEY);
+    // Best effort: records logout_at for this session; the page leaves either way.
+    if (s) await fetch(`${(process.env.NEXT_PUBLIC_IDENTITY_ORG_SERVICE ?? '').replace(/\/+$/, '')}/api/auth/logout`,
+      { method: 'POST', headers: { Authorization: `Bearer ${s.accessToken}` }, keepalive: true }).catch(() => undefined);
+    window.location.assign(LOGIN_PATH);
+    return;
+  }
   const cfg = await tenantConfig();
   const s = readSession();
   sessionStorage.removeItem(SESSION_KEY);

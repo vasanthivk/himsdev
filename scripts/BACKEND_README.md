@@ -162,3 +162,20 @@ keytool -import -noprompt -alias hims-local -file /mnt/d/Projects/2026/himspoc/h
 ```
 
 and restart API Manager.
+
+## Authentication modes (WSO2_AUTHENTICATION)
+
+`Auth:Enabled` switches authentication on or off; `WSO2_AUTHENTICATION` (top level of each service's `appsettings.json`)
+picks how callers are authenticated. Set the **same value** in the frontends' `.env` files and restart everything.
+
+| `WSO2_AUTHENTICATION` | Frontend calls | Service accepts |
+| --- | --- | --- |
+| `true` | the WSO2 API Manager gateway (`NEXT_PUBLIC_*_API`) after WSO2 Identity Server sign-in | only the gateway's backend JWT (`X-JWT-Assertion`, checked against `Auth:*`) |
+| `false` | the services directly (`NEXT_PUBLIC_*_SERVICE`) after signing in on HIMS's `/login` page | only a HIMS JWT (`Authorization: Bearer`, checked against `Jwt:*`) |
+
+HIMS's own login (`false`) lives in Identity & Org: `POST /api/auth/login` (username + password from `sec.user_account`,
+roles from `sec.user_role`/`sec.role`, session in `sec.user_session`; 5 wrong passwords lock the account),
+`POST /api/auth/logout`, and `POST /api/auth/users` (ADMIN only) to create users with role codes such as FRONT_OFFICE,
+BILLING, DOCTOR, LAB_TECH. Passwords are stored as PBKDF2-SHA256 hashes. While `sec.user_account` is empty, Identity & Org
+creates the ADMIN role and the `Jwt:BootstrapAdmin` user at startup - change that password and remove the entry afterwards.
+All services share `Jwt:SigningKey` (HMAC-SHA256); keep it secret and identical everywhere.

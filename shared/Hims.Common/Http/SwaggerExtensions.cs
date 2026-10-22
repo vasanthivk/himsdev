@@ -30,6 +30,16 @@ public static class SwaggerExtensions
             };
             c.AddSecurityDefinition("GatewayJwt", gatewayJwt);
             c.AddSecurityRequirement(new OpenApiSecurityRequirement { [gatewayJwt] = Array.Empty<string>() });
+
+            // WSO2_AUTHENTICATION=false: HIMS's own token from Identity & Org's POST /api/auth/login.
+            var himsJwt = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT",
+                Description = "HIMS access token (WSO2_AUTHENTICATION=false) - from Identity & Org's POST /api/auth/login",
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "HimsJwt" },
+            };
+            c.AddSecurityDefinition("HimsJwt", himsJwt);
+            c.AddSecurityRequirement(new OpenApiSecurityRequirement { [himsJwt] = Array.Empty<string>() });
         });
         return services;
     }

@@ -1,6 +1,7 @@
 using Hims.Common.Http;
 using Hims.Common.Logging;
 using Hims.IdentityOrg.Data;
+using Hims.IdentityOrg.Services;
 
 // Identity, Organization & Reference Data (platform service): the source of truth for organization, branches,
 // departments, staff and the practitioner registry. Other services keep read-only copies in their ref.* tables,
@@ -12,4 +13,5 @@ builder.AddHimsService<IdentityOrgDbContext>("identity-org", "HIMS Identity, Org
 
 var app = builder.Build();
 app.UseHims<IdentityOrgDbContext>();
+await app.SeedBootstrapAdminAsync();   // WSO2_AUTHENTICATION=false only: first ADMIN user while sec.user_account is empty
 app.Run();

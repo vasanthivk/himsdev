@@ -9,6 +9,8 @@ const zones = {
 
 module.exports = {
   eslint: { ignoreDuringBuilds: true },
+  // Not a NEXT_PUBLIC_ name, so it is passed to the browser code explicitly (read by lib/api.ts).
+  env: { WSO2_AUTHENTICATION: process.env.WSO2_AUTHENTICATION ?? '' },
   async rewrites() {
     return Object.entries(zones).flatMap(([prefix, url]) => [
       { source: prefix, destination: `${url}${prefix}` },

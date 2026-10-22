@@ -44,13 +44,65 @@ public static class HimsAuthExtensions
     private const string EndUserClaim = "http://wso2.org/claims/enduser";
     private static readonly string[] DefaultRoleClaims = ["http://wso2.org/claims/role", "roles", "groups"];
 
-    /// <summary>When Auth:Enabled, every endpoint needs a valid gateway JWT (and the read/write roles) unless it is marked AllowAnonymous.</summary>
+    /// <summary>
+    /// When Auth:Enabled, every endpoint needs a valid token (and the read/write roles) unless it is marked AllowAnonymous.
+    /// WSO2_AUTHENTICATION=true (default): the WSO2 API Manager gateway's backend JWT (header X-JWT-Assertion).
+    /// WSO2_AUTHENTICATION=false: HIMS's own JWT (Authorization: Bearer), issued by Identity &amp; Org - see section "Jwt".
+    /// </summary>
     public static WebApplicationBuilder AddHimsAuth(this WebApplicationBuilder builder)
     {
         var options = builder.Configuration.GetSection("Auth").Get<HimsAuthOptions>() ?? new HimsAuthOptions();
+        var jwt = builder.Configuration.GetSection("Jwt").Get<HimsJwtOptions>() ?? new HimsJwtOptions();
+        var mode = new HimsAuthMode(options.Enabled, builder.Configuration.GetValue("WSO2_AUTHENTICATION", true));
         builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton(jwt);
+        builder.Services.AddSingleton(mode);
+        builder.Services.AddSingleton<HimsTokenIssuer>();
         if (!options.Enabled) { builder.Services.AddAuthorization(); return builder; }
 
+        if (mode.Wso2) AddGatewayJwt(builder, options); else AddHimsJwt(builder, jwt);
+
+        builder.Services.AddSingleton<IAuthorizationHandler, HimsAccessHandler>();
+        builder.Services.AddAuthorization(a => a.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser().AddRequirements(new HimsAccessRequirement()).Build());
+        return builder;
+    }
+
+    /// <summary>HIMS's own tokens: HMAC-signed by Identity &amp; Org, sent by the frontend as Authorization: Bearer.</summary>
+    private static void AddHimsJwt(WebApplicationBuilder builder, HimsJwtOptions jwt)
+    {
+        var key = jwt.Key();   // fails at startup when the signing key is missing or too short
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(j =>
+        {
+            j.MapInboundClaims = false;
+            j.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidIssuer = jwt.Issuer,
+                ValidAudience = jwt.Audience,
+                IssuerSigningKey = key,
+                ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1),
+                NameClaimType = HimsClaims.Name,
+                RoleClaimType = HimsClaims.Role,
+            };
+            j.Events = new JwtBearerEvents
+            {
+                OnChallenge = ctx =>
+                {
+                    var reason = ctx.AuthenticateFailure?.Message
+                        ?? (string.IsNullOrEmpty(ctx.Request.Headers.Authorization.ToString()) ? "no Authorization: Bearer token" : "not authenticated");
+                    ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Hims.Auth")
+                        .LogWarning("401 {Method} {Path}: {Reason}", ctx.Request.Method, ctx.Request.Path, reason);
+                    return Task.CompletedTask;
+                },
+            };
+        });
+    }
+
+    /// <summary>WSO2 API Manager gateway: only its signed backend JWT (X-JWT-Assertion) is accepted.</summary>
+    private static void AddGatewayJwt(WebApplicationBuilder builder, HimsAuthOptions options)
+    {
         var roleClaims = options.RoleClaims.Length > 0 ? options.RoleClaims : DefaultRoleClaims;
         var handler = new HttpClientHandler();
         if (options.AllowUntrustedCertificate) handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
@@ -109,11 +161,6 @@ public static class HimsAuthExtensions
                 },
             };
         });
-
-        builder.Services.AddSingleton<IAuthorizationHandler, HimsAccessHandler>();
-        builder.Services.AddAuthorization(a => a.FallbackPolicy = new AuthorizationPolicyBuilder()
-            .RequireAuthenticatedUser().AddRequirements(new HimsAccessRequirement()).Build());
-        return builder;
     }
 
     public static WebApplication UseHimsAuth(this WebApplication app)
@@ -134,6 +181,13 @@ public static class HimsAuthExtensions
             return config;
         }
     }
+}
+
+/// <summary>Which authentication is active: <see cref="Enabled"/> = Auth:Enabled, <see cref="Wso2"/> = WSO2_AUTHENTICATION.</summary>
+public sealed record HimsAuthMode(bool Enabled, bool Wso2)
+{
+    /// <summary>HIMS's own login and tokens are in use (Identity &amp; Org's /api/auth endpoints are active).</summary>
+    public bool HimsJwt => !Wso2;
 }
 
 /// <summary>Read/write role check applied to every endpoint (Auth:ReadRoles for GET/HEAD/OPTIONS, Auth:WriteRoles otherwise).</summary>

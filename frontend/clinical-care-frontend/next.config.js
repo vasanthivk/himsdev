@@ -2,6 +2,8 @@
 module.exports = {
   basePath: '/clinical-care',
   eslint: { ignoreDuringBuilds: true },
+  // Not a NEXT_PUBLIC_ name, so it is passed to the browser code explicitly (read by lib/api.ts).
+  env: { WSO2_AUTHENTICATION: process.env.WSO2_AUTHENTICATION ?? '' },
 };
 
 // `node next.config.js <dev|start>` runs Next on CLINICAL_CARE_PORT from .env. Next reads the port before it loads this config,
