@@ -48,3 +48,6 @@ certs/
 # ---------- Next.js dev HTTPS certificate (frontend/<app>/certificates, created by --experimental-https; contains a private key) ----------
 frontend/*/certificates/
 config/certificates/
+
+# ---------- Backups written by config/copy_to_app.sh (contain passwords and keys) ----------
+config/backup/

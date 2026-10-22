@@ -7,7 +7,7 @@ The files here are **copies**. The applications read their config from their own
 | Script | Direction | Overwrites |
 | --- | --- | --- |
 | `copy_to_config.sh` | `services/`, `frontend/` → `config/` | Deletes and rebuilds `config/services/` and `config/frontend/` |
-| `copy_to_app.sh` | `config/` → `services/`, `frontend/` | The `.env` / `appsettings.json` in each application folder |
+| `copy_to_app.sh` | `config/` → `services/`, `frontend/` | The `.env` / `appsettings.json` in each application folder (backed up first to `config/backup/<dd_MM_yyyy_HH_mm>/`) |
 
 Both scripts are Bash (use Git Bash on Windows) and can be run from any directory: they locate the repository root from their own location.
 
@@ -83,9 +83,12 @@ From inside `config/`:
 bash copy_to_app.sh
 ```
 
-For each sub folder of `config/services/` and `config/frontend/`, the script copies `.env` and `appsettings.json`, when present, into the folder of the same name under `services/` or `frontend/`, and prints each file copied.
+First, the script backs up the applications' current config files to `config/backup/<dd_MM_yyyy_HH_mm>/` (for example `config/backup/22_10_2026_12_41/`), keeping the same layout: `services/<app>/` and `frontend/<app>/`, each with its `.env` and/or `appsettings.json`. Run it twice in the same minute and the seconds are added to the folder name.
 
-- The application's existing file is **overwritten** without a backup.
+Then, for each sub folder of `config/services/` and `config/frontend/`, it copies `.env` and `appsettings.json`, when present, into the folder of the same name under `services/` or `frontend/`, and prints each file copied.
+
+- The application's existing file is **overwritten** - the copy in the backup folder is how to undo it (copy it back by hand).
+- `config/backup/` is git-ignored: the backups contain passwords and keys. Delete old backup folders when no longer needed.
 - Nothing is deleted: a config file that exists in the application but not in `config/` is left as it is.
 - Application folders are never created. A sub folder with no matching application folder is reported as a warning and skipped.
 - If `config/services/` or `config/frontend/` is missing, that area is reported as a warning and skipped.
