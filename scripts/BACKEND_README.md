@@ -127,11 +127,12 @@ code, then re-run — nothing was started on the broken build, so there's no sta
 up first.
 ## HTTPS
 
-Every backend service also serves HTTPS on its HTTP port + 2000 (patient-access 5001 -> 7001, identity-org 5010 -> 7010,
-clinical-care 5002 -> 7002, laboratory 5003 -> 7003, revenue-cycle 5006 -> 7006, Integration Hub 5011 -> 7011). The HTTP
-ports stay as they are for the frontends, the laboratory -> hub calls and the Open Integration Engine.
+The .NET services serve **HTTPS only** (no HTTP port): patient-access 7001, clinical-care 7002, laboratory 7003,
+revenue-cycle 7006, identity-org 7010 (the other services likewise on their old HTTP port + 2000, 7004-7013). Swagger is at
+`https://localhost:<port>/swagger`. The Integration Hub still serves both HTTP 5011 and HTTPS 7011: the Open Integration
+Engine device channels, the laboratory service and the simulator call it on HTTP.
 
-- .NET services: `Kestrel:Endpoints` in each `appsettings.json` (HTTP + HTTPS with `../../certs/hims-local.pfx`).
+- .NET services: `Kestrel:Endpoints:Https` in each `appsettings.json` (with `../../certs/hims-local.pfx`).
 - Integration Hub: `scripts/integration.sh` runs `python -m app.serve`, which serves HTTP and, when
   `certs/hims-local.crt.pem` + `.key.pem` exist, HTTPS in the same process (background workers start once).
 

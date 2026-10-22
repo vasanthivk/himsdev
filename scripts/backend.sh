@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 
 DOTNET_SERVICES=(identity-org patient-access clinical-care revenue-cycle laboratory)
 ALL_DOTNET_PROJECTS=(identity-org patient-access clinical-care laboratory imaging pharmacy-supply revenue-cycle digital-engagement field-ops hospital-ops comms-docs back-office)
-PORTS_BY_SERVICE_DOTNET="identity-org=5010 patient-access=5001 clinical-care=5002 revenue-cycle=5006 laboratory=5003"
+PORTS_BY_SERVICE_DOTNET="identity-org=7010 patient-access=7001 clinical-care=7002 revenue-cycle=7006 laboratory=7003"   # HTTPS only (Kestrel:Endpoints in appsettings.json)
 mkdir -p logs .pids
 
 # ------------------------------------------------------------------------------------------------ helpers
@@ -49,7 +49,8 @@ kill_port() {
 do_stop() {
   echo "== Stopping .NET services =="
   for s in "${DOTNET_SERVICES[@]}"; do kill_pidfile "$s"; done
-  for s in "${DOTNET_SERVICES[@]}"; do kill_port "$(port_of "$s")"; kill_port "$(( $(port_of "$s") + 2000 ))"; done
+  # Also the old HTTP port (HTTPS port - 2000), in case an instance from before HTTPS-only still runs.
+  for s in "${DOTNET_SERVICES[@]}"; do kill_port "$(port_of "$s")"; kill_port "$(( $(port_of "$s") - 2000 ))"; done
 }
 
 # ------------------------------------------------------------------------------------------------ start
@@ -80,8 +81,7 @@ do_start() {
   done
 
   echo
-  echo "Swagger: 5010 identity-org, 5001 patient-access, 5002 clinical-care, 5006 revenue-cycle, 5003 laboratory"
-  echo "HTTPS:   same services on port + 2000 (7010, 7001, 7002, 7006, 7003) with certs/hims-local.pfx"
+  echo "Swagger (HTTPS only): https://localhost:7010 identity-org, 7001 patient-access, 7002 clinical-care, 7006 revenue-cycle, 7003 laboratory"
   echo "Logs: ./logs/<service>.log"
   echo "(Integration Hub is managed separately: ./scripts/integration.sh start)"
 }
@@ -92,10 +92,8 @@ do_status() {
   echo "== .NET services =="
   for s in "${DOTNET_SERVICES[@]}"; do
     port=$(port_of "$s")
-    code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" 2>/dev/null || echo "000")
+    code=$(curl -sk -o /dev/null -w "%{http_code}" "https://localhost:$port/health" 2>/dev/null || echo "000")
     [ "$code" = "200" ] && echo "  $s (port $port): UP" || echo "  $s (port $port): NOT RESPONDING"
-    code=$(curl -sk -o /dev/null -w "%{http_code}" "https://localhost:$((port + 2000))/health" 2>/dev/null || echo "000")
-    [ "$code" = "200" ] && echo "  $s https (port $((port + 2000))): UP" || echo "  $s https (port $((port + 2000))): NOT RESPONDING"
   done
 }
 
