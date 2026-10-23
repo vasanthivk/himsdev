@@ -13,6 +13,7 @@ builder.Services.AddRefReplica<PatientAccessDbContext, RefOrganization>("Organiz
 builder.Services.AddRefReplica<PatientAccessDbContext, RefBranch>("BranchUpdated");
 builder.Services.AddRefReplica<PatientAccessDbContext, RefDepartment>("DepartmentUpdated");
 builder.Services.AddRefReplica<PatientAccessDbContext, RefPractitioner>("PractitionerUpdated");
+builder.Services.AddRefReplica<PatientAccessDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
 
 var app = builder.Build();
 app.UseHims<PatientAccessDbContext>();

@@ -9,6 +9,8 @@ builder.AddHimsFileLogging("back-office");   // logs/back-office/dd-MM-yyyy.log 
 builder.AddHimsService<BackOfficeDbContext>("back-office", "HIMS Back Office",
     "Finance, HRMS, campus and IT helpdesk (optional; normally bought and integrated). (Scaffold: data model mapped, no workflow endpoints yet.)");
 
+builder.Services.AddRefReplica<BackOfficeDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
+
 var app = builder.Build();
 app.UseHims<BackOfficeDbContext>();
 app.Run();

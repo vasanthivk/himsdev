@@ -9,6 +9,8 @@ builder.AddHimsFileLogging("imaging");   // logs/imaging/dd-MM-yyyy.log (+ dd-MM
 builder.AddHimsService<ImagingDbContext>("imaging", "HIMS Imaging (RIMS + PACS)",
     "Radiology procedures, modalities, scheduling, reporting and the PACS/DICOM index. (Scaffold: data model mapped, no workflow endpoints yet.)");
 
+builder.Services.AddRefReplica<ImagingDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
+
 var app = builder.Build();
 app.UseHims<ImagingDbContext>();
 app.Run();

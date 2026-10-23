@@ -28,6 +28,10 @@ h1 { font-size:22px; margin:4px 0 14px; }
 .field span { font-size:12px; color:var(--muted); }
 input,select,textarea { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:#fff; width:100%; }
 input:focus,select:focus,textarea:focus { outline:2px solid #9fd0e6; border-color:var(--brand); }
+.password-input { position:relative; display:block; }
+.password-input input { padding-right:38px; }
+.password-input .eye { position:absolute; right:4px; top:50%; transform:translateY(-50%); padding:4px 6px; border:none; background:transparent; color:var(--muted); line-height:0; }
+.password-input .eye:hover { background:transparent; color:var(--brand); }
 textarea { min-height:60px; resize:vertical; }
 button,.btn { font:inherit; padding:7px 14px; border:1px solid var(--brand); background:var(--brand); color:#fff; border-radius:6px; cursor:pointer; text-decoration:none; display:inline-block; }
 button:hover,.btn:hover { background:var(--brand-d); }

@@ -42,6 +42,7 @@ builder.Services.AddRefReplica<LaboratoryDbContext, RefService>("ServiceUpdated"
 builder.Services.AddRefReplica<LaboratoryDbContext, RefPractitioner>("PractitionerUpdated");
 builder.Services.AddRefReplica<LaboratoryDbContext, RefBranch>("BranchUpdated");
 builder.Services.AddRefReplica<LaboratoryDbContext, RefOrganization>("OrganizationUpdated");
+builder.Services.AddRefReplica<LaboratoryDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
 
 var app = builder.Build();
 app.UseHims<LaboratoryDbContext>();

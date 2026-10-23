@@ -17,6 +17,7 @@ builder.Services.AddRefReplica<RevenueCycleDbContext, RefPatient>("PatientRegist
 builder.Services.AddRefReplica<RevenueCycleDbContext, RefEncounter>("EncounterStarted", "EncounterClosed");
 builder.Services.AddRefReplica<RevenueCycleDbContext, RefBranch>("BranchUpdated");
 builder.Services.AddRefReplica<RevenueCycleDbContext, RefOrganization>("OrganizationUpdated");
+builder.Services.AddRefReplica<RevenueCycleDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
 
 var app = builder.Build();
 app.UseHims<RevenueCycleDbContext>();

@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { API } from '@/lib/api';
 import { HIMS_LOGIN, safeReturnTo, storeHimsSession } from '@/lib/auth';
 import { Alert, Card, Field } from '@/components/ui';
+import PasswordInput from '@/components/PasswordInput';
 
 // HIMS's own sign-in (WSO2_AUTHENTICATION=false): username + password against Identity & Org's POST /api/auth/login, which
 // returns a HIMS access token. With WSO2 sign-in this page just forwards to the home page.
@@ -39,7 +40,7 @@ export default function Login() {
       <Card title="Sign in to HIMS">
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field label="Username"><input autoFocus autoComplete="username" required value={username} onChange={(e) => setUsername(e.target.value)} /></Field>
-          <Field label="Password"><input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          <Field label="Password"><PasswordInput autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
           {error && <Alert kind="error">{error}</Alert>}
           <button type="submit" disabled={busy}>{busy ? 'Signing in...' : 'Sign in'}</button>
         </form>

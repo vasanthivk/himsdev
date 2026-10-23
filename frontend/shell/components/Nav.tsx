@@ -5,6 +5,7 @@ const links = [
   { href: '/revenue-cycle', label: 'Billing', key: 'revenue-cycle' },
   { href: '/clinical-care', label: 'Doctor', key: 'clinical-care' },
   { href: '/laboratory', label: 'Laboratory', key: 'laboratory' },
+  { href: '/users', label: 'Users', key: 'users' },
 ];
 
 export default function Nav({ active, user }: { active: string; user?: React.ReactNode }) {

@@ -9,6 +9,8 @@ builder.AddHimsFileLogging("field-ops");   // logs/field-ops/dd-MM-yyyy.log (+ d
 builder.AddHimsService<FieldOpsDbContext>("field-ops", "HIMS Field Operations",
     "Ambulance, home collection/delivery, fleet, trips, GPS and cold-chain. (Scaffold: data model mapped, no workflow endpoints yet.)");
 
+builder.Services.AddRefReplica<FieldOpsDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
+
 var app = builder.Build();
 app.UseHims<FieldOpsDbContext>();
 app.Run();

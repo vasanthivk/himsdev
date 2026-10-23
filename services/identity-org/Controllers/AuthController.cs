@@ -10,18 +10,16 @@ namespace Hims.IdentityOrg.Controllers;
 /// <summary>
 /// HIMS's own login (WSO2_AUTHENTICATION=false): users, roles and sessions live in sec.user_account, sec.role, sec.user_role and
 /// sec.user_session; the access token is a HIMS JWT that every service validates. With WSO2_AUTHENTICATION=true these endpoints
-/// answer 404 - users sign in through WSO2 Identity Server instead.
+/// answer 404 - users sign in through WSO2 Identity Server instead. Users are created with POST /api/users (UsersController).
 /// </summary>
 [ApiController]
 [Route("api/auth")]
 public class AuthController(IdentityOrgDbContext db, HimsTokenIssuer issuer, HimsAuthMode mode, ILogger<AuthController> log) : ControllerBase
 {
     private const int MaxFailedLogins = 5;
-    private const int MinPasswordLength = 8;
     private const string InvalidCredentials = "Invalid username or password.";
 
     public record LoginRequest(string Username, string Password, int? BranchId);
-    public record CreateUserRequest(string Username, string Password, string[] Roles, long? EmployeeId, string? UserType);
 
     private IActionResult HimsLoginOff() => NotFound(new { error = "HIMS login is off (WSO2_AUTHENTICATION=true) - sign in through WSO2 Identity Server." });
 
@@ -82,45 +80,6 @@ public class AuthController(IdentityOrgDbContext db, HimsTokenIssuer issuer, Him
             }
         }
         return NoContent();
-    }
-
-    /// <summary>Creates a user with the given role codes (e.g. FRONT_OFFICE, BILLING, DOCTOR, LAB_TECH). Missing roles are created. ADMIN only.</summary>
-    [HttpPost("users")]
-    public async Task<IActionResult> CreateUser(CreateUserRequest req, CancellationToken ct)
-    {
-        if (!mode.HimsJwt) return HimsLoginOff();
-        if (mode.Enabled && !User.IsInRole(AuthBootstrap.AdminRole)) return StatusCode(StatusCodes.Status403Forbidden, new { error = "Only ADMIN users can create users." });
-        if (string.IsNullOrWhiteSpace(req.Username)) return BadRequest(new { error = "Username is required." });
-        if ((req.Password ?? "").Length < MinPasswordLength) return BadRequest(new { error = $"Password must be at least {MinPasswordLength} characters." });
-
-        var username = req.Username.Trim();
-        if (await db.UserAccounts.AnyAsync(u => u.Username == username, ct)) return Conflict(new { error = $"User '{username}' already exists." });
-
-        var organizationId = int.TryParse(User.FindFirst(HimsClaims.Organization)?.Value, out var org) ? org
-            : await db.Organizations.OrderBy(o => o.OrganizationId).Select(o => o.OrganizationId).FirstAsync(ct);
-        long? createdBy = long.TryParse(User.FindFirst(HimsClaims.Subject)?.Value, out var by) ? by : null;
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        var user = new UserAccount
-        {
-            OrganizationId = organizationId, UserType = string.IsNullOrWhiteSpace(req.UserType) ? "STAFF" : req.UserType.Trim().ToUpperInvariant(),
-            Username = username, EmployeeId = req.EmployeeId, PasswordHash = PasswordHasher.Hash(req.Password!),
-            MfaEnabled = false, PasswordChangedAt = DateTime.UtcNow, CreatedBy = createdBy,
-        };
-        db.UserAccounts.Add(user);
-        await db.SaveChangesAsync(ct);
-
-        var roleCodes = (req.Roles ?? []).Select(r => r.Trim().ToUpperInvariant()).Where(r => r.Length > 0).Distinct().ToList();
-        foreach (var code in roleCodes)
-        {
-            var role = await AuthBootstrap.EnsureRole(db, organizationId, code, ct);
-            db.UserRoles.Add(new UserRole { UserId = user.UserId, RoleId = role.RoleId, CreatedBy = createdBy });
-        }
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-
-        log.LogInformation("User {Username} (user {UserId}) created with roles {Roles}", username, user.UserId, string.Join(",", roleCodes));
-        return Created($"/api/auth/users/{user.UserId}", new { user.UserId, user.Username, roles = roleCodes });
     }
 
     private async Task<List<string>> RolesOf(long userId, CancellationToken ct)

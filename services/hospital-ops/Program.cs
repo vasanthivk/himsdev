@@ -9,6 +9,8 @@ builder.AddHimsFileLogging("hospital-ops");   // logs/hospital-ops/dd-MM-yyyy.lo
 builder.AddHimsService<HospitalOpsDbContext>("hospital-ops", "HIMS Hospital Operations & Quality",
     "Assets, maintenance, housekeeping, linen, kitchen, complaints, incidents and quality. (Scaffold: data model mapped, no workflow endpoints yet.)");
 
+builder.Services.AddRefReplica<HospitalOpsDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
+
 var app = builder.Build();
 app.UseHims<HospitalOpsDbContext>();
 app.Run();

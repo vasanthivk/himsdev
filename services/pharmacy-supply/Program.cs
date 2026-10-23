@@ -9,6 +9,8 @@ builder.AddHimsFileLogging("pharmacy-supply");   // logs/pharmacy-supply/dd-MM-y
 builder.AddHimsService<PharmacySupplyDbContext>("pharmacy-supply", "HIMS Pharmacy & Supply Chain",
     "Drug/item master, stores and stock, purchasing, GRN, dispensing, narcotics register, CSSD. (Scaffold: data model mapped, no workflow endpoints yet.)");
 
+builder.Services.AddRefReplica<PharmacySupplyDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
+
 var app = builder.Build();
 app.UseHims<PharmacySupplyDbContext>();
 app.Run();

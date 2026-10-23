@@ -175,7 +175,24 @@ picks how callers are authenticated. Set the **same value** in the frontends' `.
 
 HIMS's own login (`false`) lives in Identity & Org: `POST /api/auth/login` (username + password from `sec.user_account`,
 roles from `sec.user_role`/`sec.role`, session in `sec.user_session`; 5 wrong passwords lock the account),
-`POST /api/auth/logout`, and `POST /api/auth/users` (ADMIN only) to create users with role codes such as FRONT_OFFICE,
-BILLING, DOCTOR, LAB_TECH. Passwords are stored as PBKDF2-SHA256 hashes. While `sec.user_account` is empty, Identity & Org
+`POST /api/auth/logout`. Users are created on the frontend's Users page (`POST /api/users`, see below). Passwords are stored as PBKDF2-SHA256 hashes. While `sec.user_account` is empty, Identity & Org
 creates the ADMIN role and the `Jwt:BootstrapAdmin` user at startup - change that password and remove the entry afterwards.
 All services share `Jwt:SigningKey` (HMAC-SHA256); keep it secret and identical everywhere.
+
+## Users (Identity & Org `/api/users`)
+
+The frontend's **Users** page lists users (`GET /api/users`, `GET /api/roles`) and adds them (`POST /api/users`). Adding a user,
+in one transaction:
+
+1. creates the employee in `hr.employee` (code `E0001`, `E0002`, ...),
+2. creates the HIMS login in `sec.user_account` (username = email, initial password = `Wso2UserManagement:DefaultPassword`)
+   with its `sec.user_role` rows (missing roles are created),
+3. queues an `EmployeeUpdated` event - every other service copies it into its `ref.employee`,
+4. creates the user in WSO2 Identity Server (SCIM2 `POST /t/<tenant>/scim2/Users`, `userName` = email,
+   `urn:scim:schemas:extension:custom:User.employeeId` = `employee_id`), using a client-credentials token of the tenant's
+   machine-to-machine application.
+
+The transaction is committed only after WSO2 answers 201, so a WSO2 error leaves nothing behind in HIMS. Config
+`Wso2UserManagement` (Identity & Org): `Enabled`, `BaseUrl`, `DefaultPassword`, `Scope`, `AllowUntrustedCertificate`, and
+`Tenants` - one entry per HIMS organization: `OrganizationId`, `TenantDomain`, `ClientId`, `ClientSecret`.
+With WSO2 sign-in, `/api/users` and `/api/roles` must be published as resources of the Identity & Org API on the gateway.

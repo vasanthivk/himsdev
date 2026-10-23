@@ -26,9 +26,11 @@ export default function AuthGate({ active, children }: { active: string; childre
 
   if (gate.phase === 'checking') return <main><p className="muted">Signing in...</p></main>;
   if (gate.phase === 'error') return <main><Alert kind="error">{gate.message}</Alert></main>;
+  // The shell's own pages share one layout (active="home"); /users highlights its own menu item.
+  const current = active === 'home' && window.location.pathname.startsWith('/users') ? 'users' : active;
   return (
     <>
-      <Nav active={active} user={gate.user && <ProfileMenu user={gate.user} />} />
+      <Nav active={current} user={gate.user && <ProfileMenu user={gate.user} />} />
       <main>{children}</main>
     </>
   );

@@ -18,6 +18,7 @@ builder.Services.AddRefReplica<ClinicalCareDbContext, RefService>("ServiceUpdate
 builder.Services.AddRefReplica<ClinicalCareDbContext, RefPractitioner>("PractitionerUpdated");
 builder.Services.AddRefReplica<ClinicalCareDbContext, RefBranch>("BranchUpdated");
 builder.Services.AddRefReplica<ClinicalCareDbContext, RefOrganization>("OrganizationUpdated");
+builder.Services.AddRefReplica<ClinicalCareDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
 
 var app = builder.Build();
 app.UseHims<ClinicalCareDbContext>();

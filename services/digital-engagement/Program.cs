@@ -9,6 +9,8 @@ builder.AddHimsFileLogging("digital-engagement");   // logs/digital-engagement/d
 builder.AddHimsService<DigitalEngagementDbContext>("digital-engagement", "HIMS Digital Engagement",
     "E-commerce, teleconsultation, remote monitoring, CRM and medical camps. (Scaffold: data model mapped, no workflow endpoints yet.)");
 
+builder.Services.AddRefReplica<DigitalEngagementDbContext, RefEmployee>("EmployeeUpdated");   // hr.employee copies, published by Identity & Org
+
 var app = builder.Build();
 app.UseHims<DigitalEngagementDbContext>();
 app.Run();
