@@ -347,6 +347,7 @@ CREATE TABLE sec.user_account (
     patient_id        BIGINT NULL,   -- patient portal / app | logical FK -> pat.patient [Patient Access]
     payer_id          INT NULL,          -- B2B login | logical FK -> mst.payer [Revenue Cycle]
     entra_object_id   UUID NULL,          -- Microsoft Entra ID (SSO)
+    wso2_user_id      VARCHAR(64) NULL,   -- WSO2 Identity Server user id (SCIM id), set when HIMS creates the user there; links the two accounts
     password_hash     VARCHAR(200) NULL,             -- NULL when SSO / OTP-only
     mfa_enabled       BOOLEAN NOT NULL DEFAULT TRUE,
     mfa_method        VARCHAR(20)  NULL,             -- TOTP, SMS_OTP, EMAIL_OTP, PASSKEY

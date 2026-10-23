@@ -50,6 +50,8 @@ export default function ProfileMenu({ user }: { user: User }) {
             {rows.filter(([, v]) => v).map(([k, v]) => <tr key={k}><td className="muted">{k}</td><td>{v}</td></tr>)}
           </tbody></table>
           <button className="signout" onClick={signOut} disabled={signingOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button>
+          {/* A full page load to the shell's page (the profile menu also appears inside the zones). */}
+          <a className="change-password" href="/change-password">Change password</a>
         </div>
       )}
     </div>

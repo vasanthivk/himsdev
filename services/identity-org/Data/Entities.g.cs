@@ -609,6 +609,8 @@ public class UserAccount
     public int? PayerId { get; set; }
     [Column("entra_object_id")]
     public Guid? EntraObjectId { get; set; }
+    [Column("wso2_user_id")]
+    public string? Wso2UserId { get; set; }
     [Column("password_hash")]
     public string? PasswordHash { get; set; }
     [Column("mfa_enabled")]

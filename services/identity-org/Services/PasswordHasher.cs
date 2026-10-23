@@ -7,6 +7,18 @@ namespace Hims.IdentityOrg.Services;
 /// Stored as "pbkdf2-sha256$&lt;iterations&gt;$&lt;salt base64&gt;$&lt;hash base64&gt;", so the iteration count can be raised later
 /// without breaking existing hashes.
 /// </summary>
+/// <summary>Password rule for HIMS users (WSO2 applies its own tenant policy as well).</summary>
+public static class PasswordPolicy
+{
+    /// <summary>Null when acceptable, otherwise what is wrong: 8-64 characters, upper and lower case, a digit, a special character, no spaces.</summary>
+    public static string? Problem(string password) =>
+        password.Length is < 8 or > 64 ? "Password must be 8-64 characters long."
+        : !password.Any(char.IsUpper) || !password.Any(char.IsLower) || !password.Any(char.IsDigit) || password.All(char.IsLetterOrDigit)
+            ? "Password must contain an uppercase letter, a lowercase letter, a digit and a special character."
+        : password.Any(char.IsWhiteSpace) ? "Password must not contain spaces."
+        : null;
+}
+
 public static class PasswordHasher
 {
     private const string Scheme = "pbkdf2-sha256";

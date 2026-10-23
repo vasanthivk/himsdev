@@ -17,6 +17,7 @@ a { color:var(--brand); }
 .profile-menu td { padding:4px 0; vertical-align:top; word-break:break-word; }
 .profile-menu td.muted { width:80px; }
 .profile-menu .signout { width:100%; margin-top:10px; }
+.profile-menu .change-password { display:block; text-align:center; margin-top:8px; font-size:14px; }
 main { max-width:1180px; margin:20px auto; padding:0 20px 60px; }
 h1 { font-size:22px; margin:4px 0 14px; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:16px; }

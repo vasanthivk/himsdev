@@ -11,8 +11,22 @@ SELECT o.organization_id, d.code, d.name, d.typ FROM core.organization o,
   (VALUES ('GENMED','General Medicine','CLINICAL'), ('LAB','Clinical Laboratory','DIAGNOSTIC'), ('FRONT','Front Office','ADMIN')) AS d(code,name,typ)
  WHERE o.org_code = 'DRR' ON CONFLICT (organization_id, dept_code) DO NOTHING;
 
+-- Second tenant: Apollo (https://apollo.localhost:3000, WSO2 tenant apollo.com - Wso2UserManagement:Tenants in appsettings.json).
+INSERT INTO core.organization (org_code, org_name, legal_name)
+VALUES ('APL', 'Apollo Hospitals', 'Apollo Hospitals Enterprise Limited') ON CONFLICT (org_code) DO NOTHING;
+
+INSERT INTO core.branch (organization_id, branch_code, branch_name, branch_type, city, state_code, gstin)
+SELECT o.organization_id, 'APL01', 'Apollo Hospital', 'HOSPITAL', 'Hyderabad', 'TS', NULL
+  FROM core.organization o WHERE o.org_code = 'APL' ON CONFLICT (branch_code) DO NOTHING;
+
+INSERT INTO mst.department (organization_id, dept_code, dept_name, dept_type)
+SELECT o.organization_id, d.code, d.name, d.typ FROM core.organization o,
+  (VALUES ('GENMED','General Medicine','CLINICAL'), ('LAB','Clinical Laboratory','DIAGNOSTIC'), ('FRONT','Front Office','ADMIN')) AS d(code,name,typ)
+ WHERE o.org_code = 'APL' ON CONFLICT (organization_id, dept_code) DO NOTHING;
+
 INSERT INTO mst.specialty (specialty_code, specialty_name, department_id)
-SELECT 'GENMED', 'General Medicine', d.department_id FROM mst.department d WHERE d.dept_code = 'GENMED' ON CONFLICT (specialty_code) DO NOTHING;
+SELECT 'GENMED', 'General Medicine', d.department_id FROM mst.department d JOIN core.organization o ON o.organization_id = d.organization_id
+ WHERE d.dept_code = 'GENMED' AND o.org_code = 'DRR' ON CONFLICT (specialty_code) DO NOTHING;
 
 INSERT INTO hr.employee (organization_id, branch_id, employee_code, title, first_name, last_name, gender, department_id, employment_type)
 SELECT o.organization_id, b.branch_id, e.code, e.title, e.fn, e.ln, e.g, d.department_id, 'PERMANENT'

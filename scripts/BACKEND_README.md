@@ -194,5 +194,9 @@ in one transaction:
 
 The transaction is committed only after WSO2 answers 201, so a WSO2 error leaves nothing behind in HIMS. Config
 `Wso2UserManagement` (Identity & Org): `Enabled`, `BaseUrl`, `DefaultPassword`, `Scope`, `AllowUntrustedCertificate`, and
-`Tenants` - one entry per HIMS organization: `OrganizationId`, `TenantDomain`, `ClientId`, `ClientSecret`.
+`Tenants` - one entry per frontend subdomain: `Subdomain` (e.g. `reddys` for `https://reddys.localhost:3000`), `OrganizationId`
+(the HIMS `core.organization`: 1 = Dr Reddis, 2 = Apollo), `TenantDomain`, `ClientId`, `ClientSecret` (the tenant's M2M application).
+Called from a tenant's site, `/api/users`, `/api/roles`, `/api/branches`, `/api/departments`, `/api/practitioners` and
+`/api/organizations` return only that organization, and new users must be in one of its branches. The tenant is picked from the browser's `Origin` host; with WSO2
+sign-in it must also be the tenant the user signed in to. Change password uses the same mapping.
 With WSO2 sign-in, `/api/users` and `/api/roles` must be published as resources of the Identity & Org API on the gateway.

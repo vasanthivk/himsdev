@@ -3,12 +3,14 @@ import { FormEvent, useEffect, useState } from 'react';
 import { API, api, errMsg } from '@/lib/api';
 import { Alert, Badge, Card, Field } from '@/components/ui';
 import PasswordInput from '@/components/PasswordInput';
+import { PASSWORD_RULE, passwordProblem } from '@/lib/password';
 
-// Staff users (Identity & Org). Adding one creates the employee, the HIMS login and roles, notifies the other services
-// (EmployeeUpdated -> their ref.employee) and creates the user in the organization's WSO2 Identity Server tenant.
+// Staff users (Identity & Org). Adding one creates the employee with its roles and notifies the other services (EmployeeUpdated ->
+// their ref.employee). With Portal Access it also creates the login: the user in the organization's WSO2 Identity Server tenant and
+// the HIMS username and password, linked to each other. "Generate Username and Password" fills both in for the admin to hand over.
 
 type User = {
-  userId: number; username: string; isActive: boolean; isLocked: boolean; lastLoginAt?: string; createdAt: string;
+  userId?: number; username?: string; portalAccess: boolean; isActive: boolean; isLocked: boolean; lastLoginAt?: string; createdAt: string;
   employeeId?: number; employeeCode?: string; firstName?: string; lastName?: string; email?: string; mobile?: string;
   branchId?: number; departmentId?: number; roles: string[];
 };
@@ -21,17 +23,33 @@ const STANDARD_ROLES = ['ADMIN', 'FRONT_OFFICE', 'BILLING', 'DOCTOR', 'NURSE', '
 const roleLabel = (code: string) => code.split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ');
 
 const emptyForm = {
-  branchId: '', title: 'Mr', firstName: '', lastName: '', gender: 'male', username: '', mobile: '', departmentId: '', roles: [] as string[],
-  password: '', confirmPassword: '',
+  branchId: '', title: 'Mr', firstName: '', lastName: '', gender: 'male', mobile: '', departmentId: '',
+  roles: [] as string[], portalAccess: false, generate: false, username: '', password: '', confirmPassword: '',
 };
+const noLogin = { generate: false, username: '', password: '', confirmPassword: '' };
 
-// Same rule as Identity & Org (WSO2 applies its own tenant policy as well). Empty = the configured default password.
-function passwordProblem(p: string): string | null {
-  if (p.length < 8 || p.length > 64) return 'Password must be 8-64 characters long.';
-  if (!/[A-Z]/.test(p) || !/[a-z]/.test(p) || !/[0-9]/.test(p) || !/[^A-Za-z0-9]/.test(p)) return 'Password must contain an uppercase letter, a lowercase letter, a digit and a special character.';
-  if (/\s/.test(p)) return 'Password must not contain spaces.';
-  return null;
+// Generated username: name.surname in lower case (letters and digits only), with a number added when it is taken.
+function generateUsername(firstName: string, lastName: string, taken: Set<string>) {
+  const part = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const base = [part(firstName), part(lastName)].filter(Boolean).join('.') || 'user';
+  let name = base;
+  for (let i = 2; taken.has(name); i++) name = base + i;
+  return name;
 }
+
+// Generated password meeting the password policy: 12 characters with upper and lower case letters, digits and special characters.
+function generatePassword() {
+  const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '@#$%&*!?'];
+  const random = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+  const pick = (chars: string) => chars[random(chars.length)];
+  const chars = [...sets.map(pick), ...Array.from({ length: 8 }, () => pick(sets.join('')))];
+  for (let i = chars.length - 1; i > 0; i--) {   // shuffle, so the required characters are not always first
+    const j = random(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
+
 
 export default function Users() {
   const [users, setUsers] = useState<User[]>([]);
@@ -59,15 +77,30 @@ export default function Users() {
   }
   useEffect(() => { load(); }, []);
 
-  const set = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [k]: e.target.value });
+  const takenUsernames = new Set(users.map((u) => u.username?.toLowerCase()).filter(Boolean) as string[]);
+  const set = (k: Exclude<keyof typeof emptyForm, 'roles' | 'portalAccess' | 'generate'>) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const next = { ...form, [k]: e.target.value };
+    // A generated username follows the name and surname.
+    if (form.generate && (k === 'firstName' || k === 'lastName')) next.username = generateUsername(next.firstName, next.lastName, takenUsernames);
+    setForm(next);
+  };
+  const setGenerate = (on: boolean) => {
+    const password = on ? generatePassword() : '';
+    setForm(on ? { ...form, generate: true, username: generateUsername(form.firstName, form.lastName, takenUsernames), password, confirmPassword: password }
+               : { ...form, ...noLogin });
+  };
   const toggleRole = (code: string) => setForm({ ...form, roles: form.roles.includes(code) ? form.roles.filter((r) => r !== code) : [...form.roles, code] });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (form.password || form.confirmPassword) {
-      if (form.password !== form.confirmPassword) { setMsg({ kind: 'error', text: 'The passwords do not match.' }); return; }
-      const problem = passwordProblem(form.password);
+    if (!form.firstName.trim() || !form.lastName.trim()) { setMsg({ kind: 'error', text: 'Enter the name and surname.' }); return; }
+    if (form.portalAccess) {   // the login's username and password are needed only with portal access
+      const problem = !form.username.trim() ? 'Enter a username.'
+        : /\s/.test(form.username.trim()) ? 'Username must not contain spaces.'
+        : !form.password ? 'Enter a password.'
+        : !form.confirmPassword ? 'Confirm the password.'
+        : passwordProblem(form.password) ?? (form.password !== form.confirmPassword ? 'The passwords do not match.' : null);
       if (problem) { setMsg({ kind: 'error', text: problem }); return; }
     }
     setBusy(true);
@@ -75,11 +108,14 @@ export default function Users() {
       const r = await api<any>(API.identityOrg, '/api/users', {
         body: {
           branchId: Number(form.branchId), title: form.title, firstName: form.firstName, lastName: form.lastName, gender: form.gender,
-          username: form.username, mobile: form.mobile || null, departmentId: form.departmentId ? Number(form.departmentId) : null, roles: form.roles,
-          password: form.password || null,
+          mobile: form.mobile || null, departmentId: form.departmentId ? Number(form.departmentId) : null, roles: form.roles,
+          portalAccess: form.portalAccess, ...(form.portalAccess ? { username: form.username.trim(), password: form.password } : {}),
         },
       });
-      setMsg({ kind: 'ok', text: `User ${r.username} created: employee ${r.employeeCode}${r.wso2 ? `, WSO2 user in ${r.wso2.tenant}` : ''}. The other services receive the employee within a few seconds.` });
+      const generated = form.portalAccess && form.generate ? ` Generated sign-in: username ${r.username}, password ${form.password} - give these to the user.` : '';
+      setMsg({ kind: 'ok', text: (r.portalAccess
+        ? `User ${r.username} created: employee ${r.employeeCode}${r.wso2 ? `, WSO2 user in ${r.wso2.tenant}` : ''}.`
+        : `Employee ${r.employeeCode} created without portal access.`) + generated + ' The other services receive the employee within a few seconds.' });
       setForm({ ...emptyForm, branchId: form.branchId });
       await load();
     } catch (err) { setMsg({ kind: 'error', text: errMsg(err) }); }
@@ -108,10 +144,7 @@ export default function Users() {
             <Field label="Gender *">
               <select value={form.gender} onChange={set('gender')}>{['male', 'female', 'other'].map((g) => <option key={g}>{g}</option>)}</select>
             </Field>
-            <Field label="Username *"><input required autoComplete="off" value={form.username} onChange={set('username')} /></Field>
             <Field label="Mobile"><input value={form.mobile} onChange={set('mobile')} /></Field>
-            <Field label="Password"><PasswordInput autoComplete="new-password" placeholder="Empty = default password" value={form.password} onChange={set('password')} /></Field>
-            <Field label="Confirm password"><PasswordInput autoComplete="new-password" value={form.confirmPassword} onChange={set('confirmPassword')} /></Field>
             <Field label="Department">
               <select value={form.departmentId} onChange={set('departmentId')}>
                 <option value="">-</option>
@@ -128,11 +161,30 @@ export default function Users() {
                 ))}
               </div>
             </Field>
+            <label className="field wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink)' }}>
+              <input id="portal-access" type="checkbox" style={{ width: 'auto' }} checked={form.portalAccess}
+                onChange={(e) => setForm({ ...form, ...noLogin, portalAccess: e.target.checked })} />
+              <strong>Portal Access</strong>
+              <span className="muted" style={{ fontSize: 13 }}>- a login for WSO2 Identity Server and HIMS</span>
+            </label>
+            {form.portalAccess && (
+              <>
+                <label className="field wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink)', paddingLeft: 24 }}>
+                  <input id="generate-credentials" type="checkbox" style={{ width: 'auto' }} checked={form.generate} onChange={(e) => setGenerate(e.target.checked)} />
+                  <strong>Generate Username and Password</strong>
+                  {form.generate && <button type="button" className="secondary" style={{ marginLeft: 8 }} onClick={() => setGenerate(true)}>Generate again</button>}
+                </label>
+                <Field label="Username *"><input id="username" autoComplete="off" readOnly={form.generate} value={form.username} onChange={set('username')} /></Field>
+                <Field label="Password *"><PasswordInput id="password" autoComplete="new-password" readOnly={form.generate} value={form.password} onChange={set('password')} /></Field>
+                <Field label="Confirm password *"><PasswordInput id="confirm-password" autoComplete="new-password" readOnly={form.generate} value={form.confirmPassword} onChange={set('confirmPassword')} /></Field>
+              </>
+            )}
           </div>
-          <p className="muted">
-            The password is used for both WSO2 Identity Server and the HIMS login: 8-64 characters with an uppercase letter, a lowercase
-            letter, a digit and a special character. Leave it empty to use the default password set by the administrator.
-          </p>
+          {form.portalAccess && (
+            <p className="muted">
+              The username and password are created in WSO2 Identity Server and in HIMS. Password: {PASSWORD_RULE}
+            </p>
+          )}
           <button type="submit" disabled={busy || branches.length === 0}>{busy ? 'Creating...' : 'Add user'}</button>
           {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
         </form>
@@ -140,22 +192,23 @@ export default function Users() {
 
       <Card title={`Users (${users.length})`} actions={<button className="secondary" onClick={load}>Refresh</button>}>
         <table>
-          <thead><tr><th>Code</th><th>Name</th><th>Username</th><th>Mobile</th><th>Branch</th><th>Department</th><th>Roles</th><th>Status</th><th>Last login</th></tr></thead>
+          <thead><tr><th>Code</th><th>Name</th><th>Portal Access</th><th>Username</th><th>Mobile</th><th>Branch</th><th>Department</th><th>Roles</th><th>Status</th><th>Last login</th></tr></thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.userId}>
+              <tr key={u.userId ?? `e${u.employeeId}`}>
                 <td>{u.employeeCode ?? '-'}</td>
                 <td>{[u.firstName, u.lastName].filter(Boolean).join(' ') || '-'}</td>
-                <td>{u.username}</td>
+                <td>{u.portalAccess ? <Badge tone="green">Yes</Badge> : <Badge>No</Badge>}</td>
+                <td>{u.username ?? '-'}</td>
                 <td>{u.mobile ?? ''}</td>
                 <td>{branchName(u.branchId)}</td>
                 <td>{deptName(u.departmentId)}</td>
                 <td>{u.roles.map((r) => <span key={r} style={{ marginRight: 4 }}><Badge tone="blue">{roleLabel(r)}</Badge></span>)}</td>
                 <td>{u.isLocked ? <Badge tone="red">Locked</Badge> : u.isActive ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
-                <td className="muted">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'never'}</td>
+                <td className="muted">{!u.userId ? '-' : u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'never'}</td>
               </tr>
             ))}
-            {users.length === 0 && <tr><td colSpan={9} className="muted">No users yet.</td></tr>}
+            {users.length === 0 && <tr><td colSpan={10} className="muted">No users yet.</td></tr>}
           </tbody>
         </table>
       </Card>

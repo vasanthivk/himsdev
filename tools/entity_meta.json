@@ -49162,6 +49162,14 @@
      "identity": false
     },
     {
+     "col": "wso2_user_id",
+     "prop": "Wso2UserId",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
      "col": "password_hash",
      "prop": "PasswordHash",
      "type": "string",
