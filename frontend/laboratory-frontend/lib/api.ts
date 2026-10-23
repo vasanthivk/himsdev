@@ -2,12 +2,13 @@ import { getAccessToken } from '@/lib/auth';
 
 // Shared by every zone (copied into each one - see frontend/README.md). All URLs come from each app's .env; they are inlined at
 // build / dev start, so each variable is named literally here (WSO2_AUTHENTICATION is passed through by next.config.js).
+// Each app's .env holds only the services that app calls; a missing one fails with a clear error when it is first used.
 //
 // WSO2_AUTHENTICATION=true  -> calls go through the WSO2 API Manager gateway, one published API per service (NEXT_PUBLIC_*_API):
 //                              the gateway validates the user's WSO2 IS token and subscription, then calls the service with a
 //                              signed backend JWT (X-JWT-Assertion).
-// WSO2_AUTHENTICATION=false -> calls go straight to the services' own addresses (NEXT_PUBLIC_*_SERVICE). The services must then
-//                              run with Auth:Enabled=false, since only the gateway can produce the JWT they require.
+// WSO2_AUTHENTICATION=false -> calls go straight to the services' own addresses (NEXT_PUBLIC_*_SERVICE) with HIMS's own
+//                              access token (from the /login page).
 // The Integration Hub is not published on the gateway, so it is always called on its own address.
 
 /** A required .env value: fails loudly instead of calling "undefined/api/...". */
@@ -22,24 +23,23 @@ if (wso2Authentication !== 'true' && wso2Authentication !== 'false') {
 }
 export const WSO2_AUTHENTICATION = wso2Authentication === 'true';
 
-/** Base URL of each backend: the WSO2 gateway API when WSO2_AUTHENTICATION=true, otherwise the service's own address. */
-export const API = WSO2_AUTHENTICATION
-  ? {
-      patientAccess: env('NEXT_PUBLIC_PATIENT_ACCESS_API', process.env.NEXT_PUBLIC_PATIENT_ACCESS_API),
-      clinicalCare: env('NEXT_PUBLIC_CLINICAL_CARE_API', process.env.NEXT_PUBLIC_CLINICAL_CARE_API),
-      laboratory: env('NEXT_PUBLIC_LABORATORY_API', process.env.NEXT_PUBLIC_LABORATORY_API),
-      revenueCycle: env('NEXT_PUBLIC_REVENUE_CYCLE_API', process.env.NEXT_PUBLIC_REVENUE_CYCLE_API),
-      identityOrg: env('NEXT_PUBLIC_IDENTITY_ORG_API', process.env.NEXT_PUBLIC_IDENTITY_ORG_API),
-      integration: env('NEXT_PUBLIC_INTEGRATION_SERVICE', process.env.NEXT_PUBLIC_INTEGRATION_SERVICE),
-    }
-  : {
-      patientAccess: env('NEXT_PUBLIC_PATIENT_ACCESS_SERVICE', process.env.NEXT_PUBLIC_PATIENT_ACCESS_SERVICE),
-      clinicalCare: env('NEXT_PUBLIC_CLINICAL_CARE_SERVICE', process.env.NEXT_PUBLIC_CLINICAL_CARE_SERVICE),
-      laboratory: env('NEXT_PUBLIC_LABORATORY_SERVICE', process.env.NEXT_PUBLIC_LABORATORY_SERVICE),
-      revenueCycle: env('NEXT_PUBLIC_REVENUE_CYCLE_SERVICE', process.env.NEXT_PUBLIC_REVENUE_CYCLE_SERVICE),
-      identityOrg: env('NEXT_PUBLIC_IDENTITY_ORG_SERVICE', process.env.NEXT_PUBLIC_IDENTITY_ORG_SERVICE),
-      integration: env('NEXT_PUBLIC_INTEGRATION_SERVICE', process.env.NEXT_PUBLIC_INTEGRATION_SERVICE),
-    };
+/** The gateway URL or the service's own URL, whichever WSO2_AUTHENTICATION selects; checked only when actually used. */
+const pick = (name: string, gateway: string | undefined, service: string | undefined) =>
+  WSO2_AUTHENTICATION ? env(`NEXT_PUBLIC_${name}_API`, gateway) : env(`NEXT_PUBLIC_${name}_SERVICE`, service);
+
+/**
+ * Base URL of each backend: the WSO2 gateway API when WSO2_AUTHENTICATION=true, otherwise the service's own address.
+ * Each URL is read when first used, so an app's .env only needs the services that app calls.
+ */
+export const API = {
+  get patientAccess() { return pick('PATIENT_ACCESS', process.env.NEXT_PUBLIC_PATIENT_ACCESS_API, process.env.NEXT_PUBLIC_PATIENT_ACCESS_SERVICE); },
+  get clinicalCare() { return pick('CLINICAL_CARE', process.env.NEXT_PUBLIC_CLINICAL_CARE_API, process.env.NEXT_PUBLIC_CLINICAL_CARE_SERVICE); },
+  get laboratory() { return pick('LABORATORY', process.env.NEXT_PUBLIC_LABORATORY_API, process.env.NEXT_PUBLIC_LABORATORY_SERVICE); },
+  get revenueCycle() { return pick('REVENUE_CYCLE', process.env.NEXT_PUBLIC_REVENUE_CYCLE_API, process.env.NEXT_PUBLIC_REVENUE_CYCLE_SERVICE); },
+  get identityOrg() { return pick('IDENTITY_ORG', process.env.NEXT_PUBLIC_IDENTITY_ORG_API, process.env.NEXT_PUBLIC_IDENTITY_ORG_SERVICE); },
+  // Not published on the gateway: always the hub's own address.
+  get integration() { return env('NEXT_PUBLIC_INTEGRATION_SERVICE', process.env.NEXT_PUBLIC_INTEGRATION_SERVICE); },
+};
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public data?: any) {

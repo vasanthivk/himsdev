@@ -23,12 +23,10 @@ export default function Lab() {
     try {
       const p: any[] = await api(API.laboratory, '/api/worklist/pending');
       setPending(p);
-      // Billing status comes from Revenue Cycle: a sample is only collected once its bill is paid.
-      const ids = p.flatMap((o) => o.items.map((i: any) => i.orderItemId as number));
-      const entries = await Promise.all(ids.map(async (id) => {
-        try { const b = await api(API.revenueCycle, `/api/bills/by-order-item/${id}`); return [id, b] as const; }
-        catch { return [id, { notBilled: true }] as const; }
-      }));
+      // A sample is only collected once its bill is paid. The worklist carries each item's billing status, which Laboratory
+      // keeps from Revenue Cycle's ChargePosted / PaymentReceived events.
+      const entries = p.flatMap((o) => o.items.map((i: any) => [i.orderItemId as number,
+        (i.isBilled ? { isPaid: i.isPaid, billNo: i.billNo, billStatus: i.billStatus } : { notBilled: true }) as Pay] as const));
       setPay(Object.fromEntries(entries));
       const s: any[] = await api(API.laboratory, '/api/samples');
       setSamples(s);

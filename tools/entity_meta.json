@@ -19599,6 +19599,30 @@
      "identity": false
     },
     {
+     "col": "bill_no",
+     "prop": "BillNo",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "bill_status",
+     "prop": "BillStatus",
+     "type": "string",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
+     "col": "is_paid",
+     "prop": "IsPaid",
+     "type": "bool",
+     "null": true,
+     "pk": false,
+     "identity": false
+    },
+    {
      "col": "updated_at",
      "prop": "UpdatedAt",
      "type": "DateTime",

@@ -36,6 +36,8 @@ builder.Services.AddHttpClient<IIntegrationHubClient, IntegrationHubClient>(c =>
 
 builder.Services.AddEventHandler<OrderPlacedLabHandler>();
 builder.Services.AddEventHandler<AnalyzerResultReceivedHandler>();
+builder.Services.AddEventHandler<ChargePostedLabHandler>();      // billing status in ref.order_item (Revenue Cycle)
+builder.Services.AddEventHandler<PaymentReceivedLabHandler>();
 builder.Services.AddRefReplica<LaboratoryDbContext, RefPatient>("PatientRegistered", "PatientUpdated");
 builder.Services.AddRefReplica<LaboratoryDbContext, RefEncounter>("EncounterStarted", "EncounterClosed");
 builder.Services.AddRefReplica<LaboratoryDbContext, RefService>("ServiceUpdated");

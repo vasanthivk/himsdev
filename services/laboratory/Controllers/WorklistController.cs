@@ -12,7 +12,7 @@ public class WorklistController : ControllerBase
     private readonly LaboratoryDbContext _db;
     public WorklistController(LaboratoryDbContext db) => _db = db;
 
-    /// <summary>Ordered tests with no sample yet, grouped by order.</summary>
+    /// <summary>Ordered tests with no sample yet, grouped by order, each with its billing status (isBilled, billNo, billStatus, isPaid).</summary>
     [HttpGet("pending")]
     public async Task<IActionResult> Pending(CancellationToken ct)
     {
@@ -21,7 +21,8 @@ public class WorklistController : ControllerBase
                           where o.OrderCategory == "LAB" && o.OrderStatus != "CANCELLED" && i.ItemStatus != "CANCELLED"
                                 && !_db.SampleOrderItems.Any(s => s.OrderItemId == i.OrderItemId)
                           orderby i.OrderItemId
-                          select new { i.OrderItemId, i.OrderId, i.ServiceId, o.OrderNo, o.PatientId, o.EncounterId, o.BranchId }).Take(200).ToListAsync(ct);
+                          select new { i.OrderItemId, i.OrderId, i.ServiceId, o.OrderNo, o.PatientId, o.EncounterId, o.BranchId, i.BillNo, i.BillStatus, i.IsPaid })
+                         .Take(200).ToListAsync(ct);
 
         var pids = rows.Where(r => r.PatientId != null).Select(r => r.PatientId!.Value).Distinct().ToList();
         var sids = rows.Where(r => r.ServiceId != null).Select(r => r.ServiceId!.Value).Distinct().ToList();
@@ -43,6 +44,8 @@ public class WorklistController : ControllerBase
                     ServiceName = services.FirstOrDefault(s => s.ServiceId == r.ServiceId)?.ServiceName,
                     SpecimenType = tests.FirstOrDefault(t => t.ServiceId == r.ServiceId)?.SpecimenType,
                     ContainerType = tests.FirstOrDefault(t => t.ServiceId == r.ServiceId)?.ContainerType,
+                    // Billing status, kept from Revenue Cycle's ChargePosted / PaymentReceived events (no call to Revenue Cycle here).
+                    IsBilled = r.BillNo != null, r.BillNo, r.BillStatus, IsPaid = r.IsPaid == true,
                 }).ToList(),
             };
         }).ToList();

@@ -1,4 +1,5 @@
 using Hims.ClinicalCare.Data;
+using Hims.Common.Events;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,25 @@ public class EncountersController : ControllerBase
 {
     private readonly ClinicalCareDbContext _db;
     public EncountersController(ClinicalCareDbContext db) => _db = db;
+
+    /// <summary>
+    /// The doctor finishes the visit. The encounter belongs to Patient Access, so this publishes <c>ConsultationCompleted</c>;
+    /// Patient Access closes the encounter and publishes <c>EncounterClosed</c>, which updates ref.encounter here (the visit
+    /// leaves the queue within a few seconds). Answers 202 Accepted.
+    /// </summary>
+    [HttpPost("{id:long}/close")]
+    public async Task<IActionResult> Close(long id, CancellationToken ct)
+    {
+        var e = await _db.RefEncounters.FirstOrDefaultAsync(x => x.EncounterId == id, ct);
+        if (e is null) return NotFound(new { error = $"Encounter {id} is not known to Clinical Care." });
+        if (e.EncounterStatus != "OPEN") return Ok(new { e.EncounterId, e.EncounterStatus, message = "The visit is already closed." });
+
+        _db.EnqueueEvent("ConsultationCompleted", "pat.encounter", e.EncounterId,
+            new ConsultationCompletedPayload(e.EncounterId, e.PatientId, e.AttendingPractitionerId, DateTime.UtcNow),
+            e.OrganizationId, e.BranchId, e.PatientId);
+        await _db.SaveChangesAsync(ct);
+        return Accepted(new { e.EncounterId, status = "CLOSE_REQUESTED", message = "Visit close sent to Patient Access." });
+    }
 
     /// <summary>Encounters (default status OPEN) with the patient's name; optionally only for one practitioner.</summary>
     [HttpGet]

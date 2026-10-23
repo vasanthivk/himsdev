@@ -46,6 +46,12 @@ public record ResultVerifiedPayload(
     long SampleId, string SampleBarcode, long OrderId, long PatientId, long? EncounterId,
     IReadOnlyList<long> OrderItemIds, IReadOnlyList<LabResultPayload> Results);
 
+/// <summary>
+/// ConsultationCompleted (Clinical Care): the doctor finished the visit. Patient Access, which owns the encounter, closes it and
+/// publishes EncounterClosed.
+/// </summary>
+public record ConsultationCompletedPayload(long EncounterId, long? PatientId, long? PractitionerId, DateTime CompletedAt);
+
 /// <summary>LabReportReleased / CriticalValueDetected (Laboratory).</summary>
 public record LabReportReleasedPayload(
     long LabReportId, long OrderId, long PatientId, long? EncounterId, long SampleId, string SampleBarcode,

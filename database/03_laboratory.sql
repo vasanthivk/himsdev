@@ -732,6 +732,9 @@ CREATE TABLE ref.order_item (
     performing_department_id     INT NULL,
     item_status                  VARCHAR(20) NULL,
     is_billed                    BOOLEAN NULL,
+    bill_no                      VARCHAR(30) NULL,            -- billing status kept from Revenue Cycle events (ChargePosted, PaymentReceived)
+    bill_status                  VARCHAR(20) NULL,            -- OPEN / PARTIALLY_PAID / SETTLED ...
+    is_paid                      BOOLEAN NULL,                -- TRUE once the bill is SETTLED: the sample may be collected
     updated_at                   TIMESTAMPTZ(3) NULL,
     updated_by                   BIGINT NULL,
     source_version               BIGINT NULL,                 -- version / sequence from publisher (ignore stale events)

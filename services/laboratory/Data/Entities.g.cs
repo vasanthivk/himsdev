@@ -1383,6 +1383,12 @@ public class RefOrderItem
     public string? ItemStatus { get; set; }
     [Column("is_billed")]
     public bool? IsBilled { get; set; }
+    [Column("bill_no")]
+    public string? BillNo { get; set; }
+    [Column("bill_status")]
+    public string? BillStatus { get; set; }
+    [Column("is_paid")]
+    public bool? IsPaid { get; set; }
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
     [Column("updated_by")]

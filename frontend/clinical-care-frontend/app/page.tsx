@@ -15,7 +15,7 @@ export default function Queue() {
   }
 
   useEffect(() => {
-    api(API.patientAccess, '/api/practitioners').then(setDoctors).catch(() => undefined);
+    api(API.clinicalCare, '/api/practitioners').then(setDoctors).catch(() => undefined);
     load('');
     const t = setInterval(() => load(), 8000);
     return () => clearInterval(t);

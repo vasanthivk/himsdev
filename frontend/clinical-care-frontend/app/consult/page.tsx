@@ -38,7 +38,7 @@ function Consult() {
     try {
       setOrders(await api(API.clinicalCare, `/api/orders?encounterId=${encounterId}`));
       setRxList(await api(API.clinicalCare, `/api/prescriptions?encounterId=${encounterId}`));
-      setResults(await api(API.laboratory, `/api/results?patientId=${patientId}`));   // lab results come straight from the Laboratory service
+      setResults(await api(API.clinicalCare, `/api/results?patientId=${patientId}`));   // verified results, kept by Clinical Care from Laboratory's ResultVerified events
     } catch { /* transient */ }
   }, [encounterId, patientId]);
 
@@ -88,7 +88,8 @@ function Consult() {
 
   async function closeVisit() {
     if (!confirm('Close this visit?')) return;
-    try { await api(API.patientAccess, `/api/encounters/${encounterId}/close`, { method: 'POST' }); ok('Visit closed.'); } catch (err) { bad(err); }
+    // Clinical Care tells Patient Access (which owns the visit) through the ConsultationCompleted event.
+    try { await api(API.clinicalCare, `/api/encounters/${encounterId}/close`, { method: 'POST' }); ok('Visit closed - it leaves the doctor queue within a few seconds.'); } catch (err) { bad(err); }
   }
 
   const updRx = (i: number, k: string, v: string) => setRx(rx.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
