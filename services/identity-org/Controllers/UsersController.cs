@@ -125,8 +125,10 @@ public class UsersController(IdentityOrgDbContext db, HimsAuthMode mode, Wso2Use
 
         // Employee code E0001, E0002, ... - serialised with an advisory lock held until the transaction ends.
         await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(hashtext('hr.employee.employee_code'))", ct);
-        var rows = await db.QueryAsync(@"SELECT COALESCE(MAX(CAST(SUBSTRING(employee_code FROM 2) AS BIGINT)), 0)
-                                           FROM hr.employee WHERE employee_code ~ '^E[0-9]+$'", new Dictionary<string, object>(), ct);
+        // hr.employee, or identity_org.hr_employee in the shared database - taken from the EF mapping.
+        var employeeTable = db.Model.FindEntityType(typeof(Employee))!.GetSchemaQualifiedTableName();
+        var rows = await db.QueryAsync($@"SELECT COALESCE(MAX(CAST(SUBSTRING(employee_code FROM 2) AS BIGINT)), 0)
+                                           FROM {employeeTable} WHERE employee_code ~ '^E[0-9]+$'", new Dictionary<string, object>(), ct);
         var code = $"E{Convert.ToInt64(rows[0][0]) + 1:D4}";
 
         var employee = new Employee

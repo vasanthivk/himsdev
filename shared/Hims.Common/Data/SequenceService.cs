@@ -15,8 +15,10 @@ public interface ISequenceService
 /// serialises the "update or create" and two callers can never get the same number. Runs in the caller's transaction, so a
 /// rolled-back registration does not burn a number.
 /// </summary>
-public sealed class SequenceService : ISequenceService
+public sealed class SequenceService(HimsDbNames names) : ISequenceService
 {
+    private readonly string _table = names.Table("core", "number_sequence");   // core.number_sequence or <schema>.core_number_sequence
+
     public async Task<string> NextAsync(DbContext db, int organizationId, int branchId, string sequenceCode, string defaultPrefix, CancellationToken ct = default)
     {
         await using var own = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
@@ -31,14 +33,14 @@ public sealed class SequenceService : ISequenceService
         };
 
         var rows = await db.QueryAsync(
-            @"UPDATE core.number_sequence SET next_value = next_value + 1
+            $@"UPDATE {_table} SET next_value = next_value + 1
                WHERE organization_id = @org AND COALESCE(branch_id, 0) = @branch AND sequence_code = @code AND fiscal_year = @fy AND is_active
            RETURNING prefix, pad_length, next_value - 1", args, ct);
 
         if (rows.Count == 0)
         {
             rows = await db.QueryAsync(
-                @"INSERT INTO core.number_sequence (organization_id, branch_id, sequence_code, prefix, fiscal_year, next_value, pad_length)
+                $@"INSERT INTO {_table} (organization_id, branch_id, sequence_code, prefix, fiscal_year, next_value, pad_length)
                   VALUES (@org, NULLIF(@branch, 0), @code, @prefix, @fy, 2, 6)
                RETURNING prefix, pad_length, next_value - 1", args, ct);
         }

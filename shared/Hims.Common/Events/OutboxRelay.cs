@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Hims.Common.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -22,10 +23,12 @@ public sealed class OutboxRelay : BackgroundService
     private readonly EventBusOptions _bus;
     private readonly HimsServiceInfo _svc;
     private readonly string _connectionString;
+    private readonly string _outbox;   // evt.outbox, or <service schema>.evt_outbox in the shared database
 
-    public OutboxRelay(IConfiguration config, IOptions<EventBusOptions> bus, HimsServiceInfo svc, ILogger<OutboxRelay> log)
+    public OutboxRelay(IConfiguration config, IOptions<EventBusOptions> bus, HimsServiceInfo svc, HimsDbNames names, ILogger<OutboxRelay> log)
     {
         _log = log;
+        _outbox = names.Table("evt", "outbox");
         _bus = bus.Value;
         _svc = svc;
         _connectionString = config.GetConnectionString("Default") ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured");
@@ -74,9 +77,9 @@ public sealed class OutboxRelay : BackgroundService
         var ids = new List<long>();
         var messages = new List<(long OutboxId, Guid EventId, string Type, byte[] Body)>();
 
-        const string select = @"SELECT outbox_id, event_id, event_type, event_version, aggregate_type, aggregate_id, session_key,
+        var select = $@"SELECT outbox_id, event_id, event_type, event_version, aggregate_type, aggregate_id, session_key,
                                        organization_id, branch_id, patient_id, correlation_id, payload_json::text, occurred_at
-                                  FROM evt.outbox
+                                  FROM {_outbox}
                                  WHERE published_at IS NULL AND publish_attempts < @max
                                  ORDER BY outbox_id
                                  LIMIT 50
@@ -135,7 +138,7 @@ public sealed class OutboxRelay : BackgroundService
             throw;
         }
 
-        await using (var upd = new NpgsqlCommand("UPDATE evt.outbox SET published_at = now(), last_error = NULL WHERE outbox_id = ANY(@ids)", conn, tx))
+        await using (var upd = new NpgsqlCommand($"UPDATE {_outbox} SET published_at = now(), last_error = NULL WHERE outbox_id = ANY(@ids)", conn, tx))
         {
             upd.Parameters.AddWithValue("ids", ids.ToArray());
             await upd.ExecuteNonQueryAsync(ct);
@@ -145,11 +148,11 @@ public sealed class OutboxRelay : BackgroundService
         return messages.Count;
     }
 
-    private static async Task RecordFailureAsync(NpgsqlDataSource ds, List<long> ids, string error, CancellationToken ct)
+    private async Task RecordFailureAsync(NpgsqlDataSource ds, List<long> ids, string error, CancellationToken ct)
     {
         await using var conn = await ds.OpenConnectionAsync(ct);
         await using var cmd = new NpgsqlCommand(
-            "UPDATE evt.outbox SET publish_attempts = publish_attempts + 1, last_error = left(@err, 1000) WHERE outbox_id = ANY(@ids)", conn);
+            $"UPDATE {_outbox} SET publish_attempts = publish_attempts + 1, last_error = left(@err, 1000) WHERE outbox_id = ANY(@ids)", conn);
         cmd.Parameters.AddWithValue("err", error);
         cmd.Parameters.AddWithValue("ids", ids.ToArray());
         await cmd.ExecuteNonQueryAsync(ct);

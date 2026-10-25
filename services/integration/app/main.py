@@ -150,7 +150,7 @@ async def inbound(request: Request, analyzer: Optional[str] = None):
 def messages(direction: Optional[str] = None, status: Optional[str] = None, limit: int = Query(50, ge=1, le=200)):
     """intg.message_log, newest first."""
     sql = ("SELECT message_log_id, interface_code, direction, message_type, correlation_id, entity_type, entity_id, "
-           "processing_status, error_message, logged_at, payload_uri FROM intg.message_log WHERE 1=1")
+           f"processing_status, error_message, logged_at, payload_uri FROM {db.table('intg', 'message_log')} WHERE 1=1")
     params: list = []
     if direction:
         sql += " AND direction = %s"; params.append(direction.upper())
@@ -164,7 +164,7 @@ def messages(direction: Optional[str] = None, status: Optional[str] = None, limi
 def message_payload(message_log_id: int):
     """The raw message kept behind payload_uri (PHI stays out of the table)."""
     with db.pool().connection() as c:
-        row = c.execute("SELECT payload_uri FROM intg.message_log WHERE message_log_id = %s", (message_log_id,)).fetchone()
+        row = c.execute(f"SELECT payload_uri FROM {db.table('intg', 'message_log')} WHERE message_log_id = %s", (message_log_id,)).fetchone()
     if not row or not row["payload_uri"]:
         raise HTTPException(404, "No payload stored for this message")
     path = unquote(urlparse(row["payload_uri"]).path)
@@ -178,7 +178,7 @@ def message_payload(message_log_id: int):
 @app.get("/api/fhir-map", tags=["Monitoring"])
 def fhir_map(entity_type: Optional[str] = None, entity_id: Optional[int] = None, limit: int = Query(100, ge=1, le=500)):
     """intg.fhir_resource_map: which FHIR resource each relational row became."""
-    sql = "SELECT * FROM intg.fhir_resource_map WHERE 1=1"
+    sql = f"SELECT * FROM {db.table('intg', 'fhir_resource_map')} WHERE 1=1"
     params: list = []
     if entity_type:
         sql += " AND entity_type = %s"; params.append(entity_type)

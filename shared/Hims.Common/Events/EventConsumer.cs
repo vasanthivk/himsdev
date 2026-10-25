@@ -1,3 +1,4 @@
+using Hims.Common.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -125,10 +126,13 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
     {
         using var scope = _sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDb>();
+        var inbox = scope.ServiceProvider.GetRequiredService<HimsDbNames>().Table("evt", "inbox");   // or <service schema>.evt_inbox
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        var inserted = await db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO evt.inbox (message_id, event_type, source_service) VALUES ({env.Id}, {env.Type}, {env.Source}) ON CONFLICT (message_id) DO NOTHING", ct);
+        // The table name is configuration (validated identifier); the values stay parameters ({0}..{2}).
+        var inserted = await db.Database.ExecuteSqlRawAsync(
+            $"INSERT INTO {inbox} (message_id, event_type, source_service) VALUES ({{0}}, {{1}}, {{2}}) ON CONFLICT (message_id) DO NOTHING",
+            new object[] { env.Id, env.Type, env.Source }, ct);
         if (inserted == 0)
         {
             await tx.RollbackAsync(ct);
@@ -139,8 +143,8 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         foreach (var handler in scope.ServiceProvider.GetServices<IEventHandler>().Where(h => h.EventType == env.Type))
             await handler.HandleAsync(env, ct);
 
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE evt.inbox SET process_status = 'PROCESSED', processed_at = now() WHERE message_id = {env.Id}", ct);
+        await db.Database.ExecuteSqlRawAsync(
+            $"UPDATE {inbox} SET process_status = 'PROCESSED', processed_at = now() WHERE message_id = {{0}}", new object[] { env.Id }, ct);
         await tx.CommitAsync(ct);
     }
 

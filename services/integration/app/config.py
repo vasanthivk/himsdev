@@ -9,7 +9,10 @@ def _bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://hims:hims@localhost:5432/hims_integration")
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://hims:hims@localhost:5432/himsdev")
+    # Schema of this service in the shared database (himsdev: integration_comms) - tables are <schema>.<old schema>_<table>.
+    # Empty = a database of its own with the original schemas (intg.message_log, evt.outbox, ...).
+    db_schema: str = os.getenv("DB_SCHEMA", "").strip()
     rabbitmq_url: str = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/%2F")
     rabbitmq_enabled: bool = _bool("RABBITMQ_ENABLED", True)
     # RabbitMQ management (HTTP) API as the Open Integration Engine reaches it, e.g. http://rabbitmq:15672. Channels created for a

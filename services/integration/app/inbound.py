@@ -46,7 +46,7 @@ def process_inbound(raw: str, *, analyzer_hint: Optional[str] = None, source: st
     correlation = f"{analyzer or 'unknown'}:{parsed.message_id}"[:100]
     with db.tx() as conn:
         dup = conn.execute(
-            "SELECT message_log_id FROM intg.message_log WHERE direction = 'IN' AND correlation_id = %s AND processing_status = 'PROCESSED' LIMIT 1",
+            f"SELECT message_log_id FROM {db.table('intg', 'message_log')} WHERE direction = 'IN' AND correlation_id = %s AND processing_status = 'PROCESSED' LIMIT 1",
             (correlation,)).fetchone()
         if dup:
             log.info("Duplicate device message %s ignored", correlation)

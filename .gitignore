@@ -51,3 +51,7 @@ config/certificates/
 
 # ---------- Backups written by config/copy_to_app.sh (contain passwords and keys) ----------
 config/backup/
+
+# ---------- Office lock files and Python caches ----------
+~$*
+__pycache__/

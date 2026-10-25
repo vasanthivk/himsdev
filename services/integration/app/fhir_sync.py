@@ -21,9 +21,9 @@ log = logging.getLogger("hub.fhirsync")
 # EncounterStarted and OrderPlaced are added here so encounters and lab orders exist in FHIR before their results (extension).
 SUBSCRIBED = ["PatientRegistered", "PatientUpdated", "EncounterStarted", "EncounterClosed", "OrderPlaced", "PrescriptionIssued", "LabReportReleased"]
 
-REF_PATIENT = ("ref.patient", "patient_id", ["uhid", "abha_number", "title", "first_name", "middle_name", "last_name", "date_of_birth", "gender",
+REF_PATIENT = (db.table("ref", "patient"), "patient_id", ["uhid", "abha_number", "title", "first_name", "middle_name", "last_name", "date_of_birth", "gender",
                                              "blood_group", "mobile", "is_vip", "is_confidential", "is_deceased", "merged_into_patient_id"])
-REF_ENCOUNTER = ("ref.encounter", "encounter_id", ["organization_id", "branch_id", "encounter_no", "patient_id", "encounter_type", "department_id",
+REF_ENCOUNTER = (db.table("ref", "encounter"), "encounter_id", ["organization_id", "branch_id", "encounter_no", "patient_id", "encounter_type", "department_id",
                                                    "specialty_id", "attending_practitioner_id", "tariff_plan_id", "primary_patient_payer_id",
                                                    "financial_class", "is_mlc", "start_at", "end_at", "encounter_status"])
 
@@ -60,7 +60,7 @@ class Ctx:
     def lookup(self, entity_type: str, entity_id, rtype: str) -> Optional[str]:
         if entity_id is None:
             return None
-        row = self.conn.execute("SELECT fhir_resource_id FROM intg.fhir_resource_map WHERE entity_type = %s AND entity_id = %s AND fhir_resource_type = %s",
+        row = self.conn.execute(f"SELECT fhir_resource_id FROM {db.table('intg', 'fhir_resource_map')} WHERE entity_type = %s AND entity_id = %s AND fhir_resource_type = %s",
                                 (entity_type, entity_id, rtype)).fetchone()
         return row["fhir_resource_id"] if row else None
 
@@ -84,7 +84,7 @@ class Ctx:
                                entity_id=int(entity_id), status="FAILED", error=str(e))
             raise
         self.conn.execute(
-            """INSERT INTO intg.fhir_resource_map (entity_type, entity_id, fhir_resource_type, fhir_resource_id, fhir_version_id, last_synced_at, sync_status)
+            f"""INSERT INTO {db.table('intg', 'fhir_resource_map')} (entity_type, entity_id, fhir_resource_type, fhir_resource_id, fhir_version_id, last_synced_at, sync_status)
                VALUES (%s, %s, %s, %s, %s, now(), 'SYNCED')
                ON CONFLICT (entity_type, entity_id, fhir_resource_type)
                DO UPDATE SET fhir_resource_id = EXCLUDED.fhir_resource_id, fhir_version_id = EXCLUDED.fhir_version_id, last_synced_at = now(), sync_status = 'SYNCED'""",
@@ -163,11 +163,11 @@ def handle_event(body: bytes, routing_key: str, fhir: Optional[FhirClient] = Non
     client = fhir if fhir is not None else default_client()
     with db.tx() as conn:
         first_time = conn.execute(
-            "INSERT INTO evt.inbox (message_id, event_type, source_service) VALUES (%s, %s, %s) ON CONFLICT (message_id) DO NOTHING RETURNING message_id",
+            f"INSERT INTO {db.table('evt', 'inbox')} (message_id, event_type, source_service) VALUES (%s, %s, %s) ON CONFLICT (message_id) DO NOTHING RETURNING message_id",
             (env["id"], etype, env.get("source", "unknown"))).fetchone()
         if not first_time:
             log.info("Duplicate %s %s ignored (already in evt.inbox)", etype, env["id"])
             return
         fn(Ctx(conn, client, env), env["data"])
-        conn.execute("UPDATE evt.inbox SET process_status = 'PROCESSED', processed_at = now() WHERE message_id = %s", (env["id"],))
+        conn.execute(f"UPDATE {db.table('evt', 'inbox')} SET process_status = 'PROCESSED', processed_at = now() WHERE message_id = %s", (env["id"],))
     log.info("Handled %s %s", etype, env["id"])

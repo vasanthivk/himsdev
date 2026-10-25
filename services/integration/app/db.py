@@ -20,6 +20,11 @@ def pool() -> ConnectionPool:
     return _pool
 
 
+def table(schema: str, name: str) -> str:
+    """("evt", "outbox") -> evt.outbox, or integration_comms.evt_outbox when DB_SCHEMA is set (the shared database himsdev)."""
+    return f"{settings.db_schema}.{schema}_{name}" if settings.db_schema else f"{schema}.{name}"
+
+
 def close_pool() -> None:
     global _pool
     if _pool is not None:
@@ -41,7 +46,7 @@ def enqueue_event(conn, event_type: str, aggregate_type: str, aggregate_id: int,
     """Transactional outbox: write the event in the caller's transaction; the relay publishes it to RabbitMQ.
     A repeated event_id is ignored (returns None), which makes re-processing an input message harmless."""
     row = conn.execute(
-        """INSERT INTO evt.outbox (event_id, event_type, aggregate_type, aggregate_id, session_key, organization_id, branch_id, patient_id, payload_json)
+        f"""INSERT INTO {table('evt', 'outbox')} (event_id, event_type, aggregate_type, aggregate_id, session_key, organization_id, branch_id, patient_id, payload_json)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (event_id) DO NOTHING RETURNING outbox_id""",
         (event_id or uuid.uuid4(), event_type, aggregate_type, aggregate_id, str(patient_id or aggregate_id),
@@ -55,7 +60,7 @@ def log_message(conn, *, interface_code: str, direction: str, message_type: Opti
                 payload_uri: Optional[str] = None, error: Optional[str] = None) -> int:
     """intg.message_log: HL7 v2 / v3 / FHIR traffic, in or out."""
     row = conn.execute(
-        """INSERT INTO intg.message_log (interface_code, direction, message_type, correlation_id, entity_type, entity_id, payload_uri, processing_status, error_message)
+        f"""INSERT INTO {table('intg', 'message_log')} (interface_code, direction, message_type, correlation_id, entity_type, entity_id, payload_uri, processing_status, error_message)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, left(%s, 2000)) RETURNING message_log_id""",
         (interface_code, direction, message_type, correlation_id, entity_type, entity_id, payload_uri, status, error),
     ).fetchone()

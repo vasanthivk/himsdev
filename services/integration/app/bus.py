@@ -80,9 +80,9 @@ class OutboxRelay(threading.Thread):
     def relay_batch(ch) -> int:
         with db.tx() as conn:
             rows = conn.execute(
-                """SELECT outbox_id, event_id, event_type, event_version, aggregate_type, aggregate_id, organization_id, branch_id,
+                f"""SELECT outbox_id, event_id, event_type, event_version, aggregate_type, aggregate_id, organization_id, branch_id,
                           patient_id, correlation_id, payload_json, occurred_at
-                     FROM evt.outbox WHERE published_at IS NULL AND publish_attempts < 20
+                     FROM {db.table('evt', 'outbox')} WHERE published_at IS NULL AND publish_attempts < 20
                     ORDER BY outbox_id LIMIT 50 FOR UPDATE SKIP LOCKED""").fetchall()
             if not rows:
                 return 0
@@ -99,9 +99,9 @@ class OutboxRelay(threading.Thread):
             except Exception as e:
                 ids = [r["outbox_id"] for r in rows]
                 with db.pool().connection() as c2:                        # separate connection: the batch transaction is rolled back
-                    c2.execute("UPDATE evt.outbox SET publish_attempts = publish_attempts + 1, last_error = left(%s, 1000) WHERE outbox_id = ANY(%s)", (str(e), ids))
+                    c2.execute(f"UPDATE {db.table('evt', 'outbox')} SET publish_attempts = publish_attempts + 1, last_error = left(%s, 1000) WHERE outbox_id = ANY(%s)", (str(e), ids))
                 raise
-            conn.execute("UPDATE evt.outbox SET published_at = now(), last_error = NULL WHERE outbox_id = ANY(%s)", ([r["outbox_id"] for r in rows],))
+            conn.execute(f"UPDATE {db.table('evt', 'outbox')} SET published_at = now(), last_error = NULL WHERE outbox_id = ANY(%s)", ([r["outbox_id"] for r in rows],))
             log.info("Published %d event(s) from outbox", len(rows))
             return len(rows)
 

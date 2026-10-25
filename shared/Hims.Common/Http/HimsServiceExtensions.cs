@@ -5,6 +5,7 @@ using Hims.Common.Events;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,7 +26,9 @@ public static class HimsServiceExtensions
         var connectionString = builder.Configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured");
 
-        builder.Services.AddDbContext<TDb>(o => o.UseNpgsql(connectionString));
+        // Database:Schema set = the shared database (himsdev), tables named <service schema>.<schema>_<table> (see HimsDbNames).
+        builder.Services.AddSingleton<HimsDbNames>();
+        builder.Services.AddDbContext<TDb>(o => o.UseNpgsql(connectionString).ReplaceService<IModelCustomizer, HimsModelCustomizer>());
         builder.Services.AddSingleton(new HimsServiceInfo(serviceName, title, description));
         builder.Services.Configure<EventBusOptions>(builder.Configuration.GetSection("RabbitMq"));
         builder.Services.AddScoped<ISequenceService, SequenceService>();
