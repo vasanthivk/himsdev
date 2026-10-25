@@ -13,12 +13,13 @@ chmod +x scripts/backend.sh           # only needed once
 
 | Service | Port | Type |
 |---|---|---|
-| identity-org | 5010 | .NET |
-| patient-access | 5001 | .NET |
-| clinical-care | 5002 | .NET |
-| revenue-cycle | 5006 | .NET |
-| laboratory | 5003 | .NET |
-| integration (Integration Hub) | 5011 | Python |
+| identity-org | 7010 | .NET |
+| patient-engagement | 7001 | .NET |
+| clinical-care | 7002 | .NET |
+| revenue-finance | 7006 | .NET |
+| diagnostics | 7003 | .NET |
+| operations-supply | 7005 | .NET |
+| integration-comms (Integration Hub, `./scripts/integration.sh`) | 5011 / 7011 | Python |
 
 Logs: `./logs/<service>.log`
 PIDs: `./.pids/<service>.pid`
@@ -52,15 +53,15 @@ PIDs: `./.pids/<service>.pid`
 1. **Build** (skipped with `--no-build`): runs `dotnet build` for `shared/Hims.Common` and every
    service project under `services/`, one at a time, quiet output. Stops immediately if any project
    fails to build — nothing is started on a broken build.
-2. **Start .NET services**: runs `dotnet run --no-build` for identity-org, patient-access,
-   clinical-care, revenue-cycle and laboratory, each in the background, logging to
+2. **Start .NET services**: runs `dotnet run --no-build` for identity-org, patient-engagement,
+   clinical-care, revenue-finance, diagnostics and operations-supply, each in the background, logging to
    `logs/<service>.log` and recording its PID to `.pids/<service>.pid`.
-3. **Start the Integration Hub**: activates `services/integration/.venv` (created automatically by
+3. **Start the Integration Hub**: activates `services/integration-comms/.venv` (created automatically by
    `run-integration-hub.sh` if you've used it before; see below if you haven't), installs
-   dependencies only if `fastapi` isn't already importable, loads `services/integration/.env`, then
+   dependencies only if `fastapi` isn't already importable, loads `services/integration-comms/.env`, then
    starts `uvicorn app.main:app --port 5011` in the background, logging to `logs/integration.log`.
 
-If `services/integration/.env` doesn't exist, the hub is skipped with a message telling you to create
+If `services/integration-comms/.env` doesn't exist, the hub is skipped with a message telling you to create
 it first (or restore it with `config_files/copy_config_files_to_app.sh`) — the other five .NET services still start normally.
 
 ## What `stop` actually does
@@ -86,7 +87,7 @@ connectivity — it does **not** confirm RabbitMQ connectivity for a service. To
 the service's own log:
 
 ```bash
-grep -i "consuming\|BrokerUnreachable" logs/laboratory.log | tail -10
+grep -i "consuming\|BrokerUnreachable" logs/diagnostics.log | tail -10
 ```
 
 ## Watching logs live
@@ -94,7 +95,7 @@ grep -i "consuming\|BrokerUnreachable" logs/laboratory.log | tail -10
 Since services run in the background, tail the log file to watch output as it happens:
 
 ```bash
-tail -f logs/laboratory.log
+tail -f logs/diagnostics.log
 tail -f logs/integration.log
 ```
 
@@ -117,7 +118,7 @@ The virtual environment wasn't set up yet. Run `./scripts/run-integration-hub.sh
 first (it creates `.venv` and installs dependencies), then `backend.sh` will find it on future runs.
 
 **Hub starts but shows wrong `RABBITMQ_URL`/`DATABASE_URL`**
-Check `services/integration/.env` — any value containing a space must be double-quoted
+Check `services/integration-comms/.env` — any value containing a space must be double-quoted
 (e.g. `SOME_NAME="two words"`), or bash will misparse the file when it's
 sourced.
 
@@ -127,10 +128,10 @@ code, then re-run — nothing was started on the broken build, so there's no sta
 up first.
 ## HTTPS
 
-The .NET services serve **HTTPS only** (no HTTP port): patient-access 7001, clinical-care 7002, laboratory 7003,
-revenue-cycle 7006, identity-org 7010 (the other services likewise on their old HTTP port + 2000, 7004-7013). Swagger is at
+The .NET services serve **HTTPS only** (no HTTP port): patient-engagement 7001, clinical-care 7002, diagnostics 7003,
+operations-supply 7005, revenue-finance 7006, identity-org 7010. Swagger is at
 `https://localhost:<port>/swagger`. The Integration Hub still serves both HTTP 5011 and HTTPS 7011: the Open Integration
-Engine device channels, the laboratory service and the simulator call it on HTTP.
+Engine device channels, the diagnostics service and the simulator call it on HTTP.
 
 - .NET services: `Kestrel:Endpoints:Https` in each `appsettings.json` (with `../../certs/hims-local.pfx`).
 - Integration Hub: `scripts/integration.sh` runs `python -m app.serve`, which serves HTTP and, when

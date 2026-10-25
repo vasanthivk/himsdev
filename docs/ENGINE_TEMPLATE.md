@@ -9,7 +9,7 @@ Not ticked, the device is only saved (`channel_status = NOT_CREATED`) and uses a
 
 ## One template per protocol
 
-The templates are files in `services/integration/app/channel_templates/`, made from the working channels exported to `oie_channels/`.
+The templates are files in `services/integration-comms/app/channel_templates/`, made from the working channels exported to `oie_channels/`.
 
 | Protocol | Template | Made from | Source connector | Data type |
 |---|---|---|---|---|
@@ -29,7 +29,7 @@ Other protocols (ASTM, LIS2-A2, FILE) have no template; their channel has to be 
 |---|---|
 | Engine URL, user, password, verify TLS | The Add-device form, saved on `lab.analyzer`. Empty = the hub's `ENGINE_*` setting. |
 | Listen port | The form's **Listen port**, used as entered. Empty = the hub's `ENGINE_FIRST_LISTEN_PORT` (default 6661) + analyzer id. |
-| RabbitMQ management API address | `RABBITMQ_API_URL` of the hub (`services/integration/.env`): the address **as the engine reaches it**. |
+| RabbitMQ management API address | `RABBITMQ_API_URL` of the hub (`services/integration-comms/.env`): the address **as the engine reaches it**. |
 | RabbitMQ user, password, virtual host | Taken from the hub's `RABBITMQ_URL`. |
 
 Before creating the channel the hub checks that no other channel in the engine already listens on the port, and reports
@@ -61,5 +61,5 @@ in place of the port, context path, RabbitMQ URL, login and routing key.
 ## Status
 
 The REST calls follow the Mirth-compatible API (`/api/users/_login`, `/api/channels/idsAndNames`, `/api/channels`,
-`/api/channels/{id}/_deploy`). After each attempt the filled-in channel is written to `services/integration/data/last_rendered_channel_<code>.xml`
+`/api/channels/{id}/_deploy`). After each attempt the filled-in channel is written to `services/integration-comms/data/last_rendered_channel_<code>.xml`
 for inspection.

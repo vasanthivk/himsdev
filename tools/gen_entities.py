@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Generates C# EF Core entities + DbContext for every table found in the
-database/*.sql scripts (the Dr Reddis data model, used exactly as supplied).
+Generates C# EF Core entities + DbContext for each of the 7 consolidated services: every table of the
+database/*.sql scripts of its parts (the Dr Reddis data model, used exactly as supplied), merged as in database_v2.
 
     python tools/gen_entities.py
 
 Output, per .NET service:  services/<slug>/Data/Entities.g.cs
                            services/<slug>/Data/<Ns>DbContext.g.cs
-The integration service (11) is Python, so no C# is generated for it.
+The integration-comms service is Python, so no C# is generated for it.
 
 Nothing here edits the SQL. Re-run it whenever the SQL changes.
 """
@@ -17,21 +17,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SQL_DIR = ROOT / "database"
 EXT_DIR = SQL_DIR / "extensions"
 
-# number, sql file stem, slug, C# namespace part, port
+# The 7 consolidated services (config/microservices_consolidation.xlsx): number, database_v2/v3 script stem, slug,
+# C# namespace part (None = Python), and the database/ scripts whose tables the service owns - the first one is the implemented
+# part: when two parts have a table of the same name, its entity keeps the plain class name (lab.report -> Report, rad.report -> RadReport).
 SERVICES = [
-    ("01", "01_patient_access",      "patient-access",      "PatientAccess",      5001),
-    ("02", "02_clinical_care",       "clinical-care",       "ClinicalCare",       5002),
-    ("03", "03_laboratory",          "laboratory",          "Laboratory",         5003),
-    ("04", "04_imaging",             "imaging",             "Imaging",            5004),
-    ("05", "05_pharmacy_supply",     "pharmacy-supply",     "PharmacySupply",     5005),
-    ("06", "06_revenue_cycle",       "revenue-cycle",       "RevenueCycle",       5006),
-    ("07", "07_digital_engagement",  "digital-engagement",  "DigitalEngagement",  5007),
-    ("08", "08_field_ops",           "field-ops",           "FieldOps",           5008),
-    ("09", "09_hospital_ops",        "hospital-ops",        "HospitalOps",        5009),
-    ("10", "10_identity_org",        "identity-org",        "IdentityOrg",        5010),
-    ("11", "11_integration",         "integration",         None,                 5011),  # Python
-    ("12", "12_comms_docs",          "comms-docs",          "CommsDocs",          5012),
-    ("13", "13_back_office",         "back-office",         "BackOffice",         5013),
+    ("01", "01_identity_org",       "identity-org",       "IdentityOrg",       ["10_identity_org"]),
+    ("02", "02_patient_engagement", "patient-engagement", "PatientEngagement", ["01_patient_access", "07_digital_engagement"]),
+    ("03", "03_clinical_care",      "clinical-care",      "ClinicalCare",      ["02_clinical_care"]),
+    ("04", "04_diagnostics",        "diagnostics",        "Diagnostics",       ["03_laboratory", "04_imaging"]),
+    ("05", "05_revenue_finance",    "revenue-finance",    "RevenueFinance",    ["06_revenue_cycle", "13_back_office"]),
+    ("06", "06_operations_supply",  "operations-supply",  "OperationsSupply",  ["05_pharmacy_supply", "09_hospital_ops", "08_field_ops"]),
+    ("07", "07_integration_comms",  "integration-comms",  None,                ["11_integration", "12_comms_docs"]),  # Python
 ]
 
 TYPE_MAP = {
@@ -164,15 +160,16 @@ def apply_extensions(tables, stem):
 
 
 def entity_names(tables):
-    base = {}
+    """Class name per table: ref.* and evt.* always get their schema as prefix (RefPatient, EvtOutbox), so they never clash with
+    owned tables. Owned tables of the same name: the first one (the implemented part, see SERVICES) keeps the plain name."""
+    first = {}
     for t in tables:
-        base.setdefault(pascal(t["table"]), []).append(t)
+        if t["schema"] not in ("ref", "evt"):
+            first.setdefault(pascal(t["table"]), t)
     names = {}
     for t in tables:
         b = pascal(t["table"])
-        if t["schema"] in ("ref", "evt"):
-            n = pascal(t["schema"]) + b
-        elif len(base[b]) > 1:
+        if t["schema"] in ("ref", "evt") or first[b] is not t:
             n = pascal(t["schema"]) + b
         else:
             n = b
@@ -180,16 +177,33 @@ def entity_names(tables):
     return names
 
 
-def gen_service(num, stem, slug, ns):
-    tables = parse_sql(SQL_DIR / f"{stem}.sql")
-    n_ext = apply_extensions(tables, stem)
+def merged_tables(parts):
+    """The tables of all parts of a consolidated service, as in database_v2: each table once; a ref.* table that several parts
+    had gets the union of their columns (e.g. ref.order_item with Laboratory's billing columns)."""
+    tables, seen = [], {}
+    for part in parts:
+        part_tables = parse_sql(SQL_DIR / f"{part}.sql")
+        apply_extensions(part_tables, part)
+        for t in part_tables:
+            key = (t["schema"], t["table"])
+            if key in seen:
+                have = {c["name"] for c in seen[key]["cols"]}
+                seen[key]["cols"] += [c for c in t["cols"] if c["name"] not in have]
+            else:
+                seen[key] = t
+                tables.append(t)
+    return tables
+
+
+def gen_service(num, stem, slug, ns, parts):
+    tables = merged_tables(parts)
     names = entity_names(tables)
     out = ROOT / "services" / slug / "Data"
     out.mkdir(parents=True, exist_ok=True)
     fallback = []  # (entity, prop, sql)
     L = [
         "// <auto-generated>",
-        f"// Generated by tools/gen_entities.py from database/{stem}.sql. DO NOT EDIT.",
+        f"// Generated by tools/gen_entities.py from database/{', database/'.join(p + '.sql' for p in parts)}. DO NOT EDIT.",
         "// One class per table, named exactly as in the data model. Re-run the tool after any SQL change.",
         "// </auto-generated>",
         "#nullable enable",
@@ -249,7 +263,7 @@ def gen_service(num, stem, slug, ns):
         "",
         f"namespace Hims.{ns}.Data;",
         "",
-        f"/// <summary>EF Core context over the <c>hims_{stem.split('_',1)[1]}</c> database: every table of {stem}.sql is mapped.</summary>",
+        f"/// <summary>EF Core context of the {slug} service (database_v3: schema <c>{stem.split('_',1)[1]}</c> of himsdev): every table of {', '.join(p + '.sql' for p in parts)} is mapped.</summary>",
         f"public partial class {ctx} : DbContext",
         "{",
         f"    public {ctx}(DbContextOptions<{ctx}> options) : base(options) {{ }}",
@@ -304,12 +318,12 @@ public static class {ns}OutboxExtensions
 
 if __name__ == "__main__":
     all_meta = {}
-    for num, stem, slug, ns, port in SERVICES:
+    for num, stem, slug, ns, parts in SERVICES:
         if ns is None:
-            n = len(parse_sql(SQL_DIR / f"{stem}.sql"))
+            n = len(merged_tables(parts))
             print(f"{num} {slug:20s} tables={n:3d}  (python service, no C# generated)")
             continue
-        n, fb, meta, names = gen_service(num, stem, slug, ns)
+        n, fb, meta, names = gen_service(num, stem, slug, ns, parts)
         all_meta[slug] = meta
         print(f"{num} {slug:20s} tables={n:3d}  sql-default fallbacks={len(fb)}")
         for f in fb[:6]:

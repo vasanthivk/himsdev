@@ -24,10 +24,10 @@ shared/*/obj/
 .vs/
 
 # ---------- Integration service (Python) ----------
-services/integration/.venv/
-services/integration/venv/
-services/integration/**/__pycache__/
-services/integration/data/payloads/*.txt
+services/integration-comms/.venv/
+services/integration-comms/venv/
+services/integration-comms/**/__pycache__/
+services/integration-comms/data/payloads/*.txt
 
 # ---------- PID files ----------
 .pids/*.pid

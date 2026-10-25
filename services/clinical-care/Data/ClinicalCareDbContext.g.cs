@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Hims.ClinicalCare.Data;
 
-/// <summary>EF Core context over the <c>hims_clinical_care</c> database: every table of 02_clinical_care.sql is mapped.</summary>
+/// <summary>EF Core context of the clinical-care service (database_v3: schema <c>clinical_care</c> of himsdev): every table of 02_clinical_care.sql is mapped.</summary>
 public partial class ClinicalCareDbContext : DbContext
 {
     public ClinicalCareDbContext(DbContextOptions<ClinicalCareDbContext> options) : base(options) { }

@@ -32,13 +32,14 @@ const pick = (name: string, gateway: string | undefined, service: string | undef
  * Each URL is read when first used, so an app's .env only needs the services that app calls.
  */
 export const API = {
-  get patientAccess() { return pick('PATIENT_ACCESS', process.env.NEXT_PUBLIC_PATIENT_ACCESS_API, process.env.NEXT_PUBLIC_PATIENT_ACCESS_SERVICE); },
+  get patientEngagement() { return pick('PATIENT_ENGAGEMENT', process.env.NEXT_PUBLIC_PATIENT_ENGAGEMENT_API, process.env.NEXT_PUBLIC_PATIENT_ENGAGEMENT_SERVICE); },
   get clinicalCare() { return pick('CLINICAL_CARE', process.env.NEXT_PUBLIC_CLINICAL_CARE_API, process.env.NEXT_PUBLIC_CLINICAL_CARE_SERVICE); },
-  get laboratory() { return pick('LABORATORY', process.env.NEXT_PUBLIC_LABORATORY_API, process.env.NEXT_PUBLIC_LABORATORY_SERVICE); },
-  get revenueCycle() { return pick('REVENUE_CYCLE', process.env.NEXT_PUBLIC_REVENUE_CYCLE_API, process.env.NEXT_PUBLIC_REVENUE_CYCLE_SERVICE); },
+  get diagnostics() { return pick('DIAGNOSTICS', process.env.NEXT_PUBLIC_DIAGNOSTICS_API, process.env.NEXT_PUBLIC_DIAGNOSTICS_SERVICE); },
+  get revenueFinance() { return pick('REVENUE_FINANCE', process.env.NEXT_PUBLIC_REVENUE_FINANCE_API, process.env.NEXT_PUBLIC_REVENUE_FINANCE_SERVICE); },
   get identityOrg() { return pick('IDENTITY_ORG', process.env.NEXT_PUBLIC_IDENTITY_ORG_API, process.env.NEXT_PUBLIC_IDENTITY_ORG_SERVICE); },
+  get operationsSupply() { return pick('OPERATIONS_SUPPLY', process.env.NEXT_PUBLIC_OPERATIONS_SUPPLY_API, process.env.NEXT_PUBLIC_OPERATIONS_SUPPLY_SERVICE); },
   // Not published on the gateway: always the hub's own address.
-  get integration() { return env('NEXT_PUBLIC_INTEGRATION_SERVICE', process.env.NEXT_PUBLIC_INTEGRATION_SERVICE); },
+  get integrationComms() { return env('NEXT_PUBLIC_INTEGRATION_COMMS_SERVICE', process.env.NEXT_PUBLIC_INTEGRATION_COMMS_SERVICE); },
 };
 
 export class ApiError extends Error {

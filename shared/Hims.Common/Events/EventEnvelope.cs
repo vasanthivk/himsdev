@@ -16,7 +16,7 @@ public sealed class EventEnvelope
     /// <summary>Event name from the data model, e.g. PatientRegistered, OrderPlaced. Also the routing key.</summary>
     public string Type { get; set; } = string.Empty;
 
-    /// <summary>Publishing service, e.g. patient-access.</summary>
+    /// <summary>Publishing service, e.g. patient-engagement.</summary>
     public string Source { get; set; } = string.Empty;
 
     /// <summary>aggregate_type/aggregate_id, e.g. pat.patient/42.</summary>

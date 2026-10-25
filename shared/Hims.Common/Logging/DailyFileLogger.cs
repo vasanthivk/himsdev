@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace Hims.Common.Logging;
 
 /// <summary>
-/// Writes every log entry to &lt;directory&gt;/&lt;dd-MM-yyyy&gt;.log (e.g. logs/patient-access/30-09-2026.log), and Error/Critical
+/// Writes every log entry to &lt;directory&gt;/&lt;dd-MM-yyyy&gt;.log (e.g. logs/patient-engagement/30-09-2026.log), and Error/Critical
 /// entries also to &lt;dd-MM-yyyy&gt;-error.log. Both switch to a new file when the local date changes.
 /// Filtered like any other provider: Logging:LogLevel, or Logging:File:LogLevel.
 /// </summary>

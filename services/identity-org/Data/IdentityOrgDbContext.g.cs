@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Hims.IdentityOrg.Data;
 
-/// <summary>EF Core context over the <c>hims_identity_org</c> database: every table of 10_identity_org.sql is mapped.</summary>
+/// <summary>EF Core context of the identity-org service (database_v3: schema <c>identity_org</c> of himsdev): every table of 10_identity_org.sql is mapped.</summary>
 public partial class IdentityOrgDbContext : DbContext
 {
     public IdentityOrgDbContext(DbContextOptions<IdentityOrgDbContext> options) : base(options) { }

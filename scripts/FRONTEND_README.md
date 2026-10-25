@@ -14,16 +14,16 @@ chmod +x scripts/frontend.sh           # only needed once
 | Zone | Port | Role |
 |---|---|---|
 | shell | 3000 | public entry point; forwards to the other four |
-| patient-access-frontend | 3001 | Patient Access |
+| patient-engagement-frontend | 3001 | Patient Access |
 | clinical-care-frontend | 3002 | Doctor / Clinical Care |
-| laboratory-frontend | 3003 | Laboratory |
-| revenue-cycle-frontend | 3006 | Billing |
+| diagnostics-frontend | 3003 | Laboratory |
+| revenue-finance-frontend | 3006 | Billing |
 
 Logs: `./logs/<zone>.log`
 PIDs: `./.pids/<zone>.pid`
 
 Open **http://localhost:3000** once everything is up — that's the only address you need; it
-forwards `/patient-access`, `/clinical-care`, `/laboratory` and `/revenue-cycle` to the matching
+forwards `/patient-engagement`, `/clinical-care`, `/diagnostics` and `/revenue-finance` to the matching
 zone.
 
 ## Commands
@@ -56,8 +56,8 @@ actually start/stop the five dev servers, or to pick up a new dependency.
 
 ## What `start` actually does
 
-For each of the five zones, in order (shell, patient-access-frontend, clinical-care-frontend,
-laboratory-frontend, revenue-cycle-frontend):
+For each of the five zones, in order (shell, patient-engagement-frontend, clinical-care-frontend,
+diagnostics-frontend, revenue-finance-frontend):
 1. Installs dependencies with `npm install` only if `node_modules` is missing, or if `--install`
    was passed (forces it for every zone regardless).
 2. Starts `npm run dev` in the background, logging to `logs/<zone>.log` and recording its PID to
@@ -90,7 +90,7 @@ Next.js dev server itself is serving pages.
 
 ```bash
 tail -f logs/shell.log
-tail -f logs/laboratory-frontend.log
+tail -f logs/diagnostics-frontend.log
 ```
 
 Watch a zone's log right after starting it — first compile typically takes 10-30 seconds per zone,

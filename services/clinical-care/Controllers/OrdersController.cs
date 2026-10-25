@@ -51,7 +51,7 @@ public class OrdersController : ControllerBase
         foreach (var item in req.Items)
         {
             var s = services.FirstOrDefault(x => x.ServiceId == item.ServiceId);
-            if (s is null) return BadRequest(new { error = $"Service {item.ServiceId} is unknown (load reference data: POST revenue-cycle /api/admin/republish)" });
+            if (s is null) return BadRequest(new { error = $"Service {item.ServiceId} is unknown (load reference data: POST revenue-finance /api/admin/republish)" });
             if (s.IsOrderable != true) return BadRequest(new { error = $"Service {s.ServiceCode} cannot be ordered" });
             if (Category(s.ServiceType) is null) return BadRequest(new { error = $"Service {s.ServiceCode} ({s.ServiceType}) is not orderable through CPOE" });
         }

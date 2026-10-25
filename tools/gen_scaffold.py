@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Writes the boilerplate every .NET microservice shares: csproj, appsettings.json, Dockerfile and (for services that
-have no hand-written workflow code) Program.cs. Hand-written Program.cs files are never overwritten."""
+have no hand-written workflow code) Program.cs. Hand-written Program.cs files are never overwritten.
+
+SUPERSEDED: this created the original 13 service folders. The services are now the 7 consolidated microservices
+(config/microservices_consolidation.xlsx), whose folders exist; tools/gen_entities.py keeps their Data/ models current."""
 import pathlib, json, sys
+
+if __name__ == "__main__":
+    sys.exit("tools/gen_scaffold.py is superseded (it would recreate the 13 pre-consolidation services). "
+             "Use tools/gen_entities.py to regenerate the 7 services' entities.")
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from gen_entities import SERVICES, ROOT
 

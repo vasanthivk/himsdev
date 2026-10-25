@@ -16,24 +16,26 @@ Microservices named exactly as in your data model (`database/DATA_MODEL_README.m
 | Path | What |
 |---|---|
 | `database/` | your 13 scripts (unchanged), `extensions/` (6 columns on `lab.analyzer`), `seed/`, `deploy.sh`; see `docs/DATABASE_CHANGES.md` |
-| `services/<name>/` | 12 .NET services + `integration/` (Python). Names: patient-access, clinical-care, laboratory, imaging, pharmacy-supply, revenue-cycle, digital-engagement, field-ops, hospital-ops, identity-org, comms-docs, back-office |
+| `database_v2/`, `database_v3/` | the 7 consolidated services: one database each (v2), or one database `himsdev` with a schema each (v3, used by the services) |
+| `services/<name>/` | the 7 microservices (`config/microservices_consolidation.xlsx`): 6 .NET - identity-org, patient-engagement, clinical-care, diagnostics, revenue-finance, operations-supply - and `integration-comms/` (Python) |
 | `shared/Hims.Common/` | outbox relay, idempotent inbox consumer, `ref.*` replication, number sequences, Swagger, health |
-| `frontend/` | shell (3000) + patient-access (3001), clinical-care (3002), laboratory (3003), revenue-cycle (3006) |
+| `frontend/` | shell (3000) + patient-engagement (3001), clinical-care (3002), diagnostics (3003), revenue-finance (3006) |
 | `tools/` | `gen_entities.py` (SQL -> C# entities for every table), `gen_scaffold.py` |
 | `docs/` | `DATABASE_CHANGES.md`, `EVENTS.md`, `ENGINE_TEMPLATE.md` |
 
-**Workflow code (backend + frontend):** Patient Access, Clinical Care, Revenue Cycle, Laboratory (+ Identity/Org reference data, Integration Hub).
-**Data model + API host only** (every table mapped, Swagger, health, event plumbing; no business endpoints yet): imaging, pharmacy-supply,
-digital-engagement, field-ops, hospital-ops, comms-docs, back-office.
+**Workflow code (backend + frontend):** Patient Access & Engagement (patient access part), Clinical Care, Revenue & Finance (revenue cycle part),
+Diagnostics (laboratory part), Identity & Organization, Integration & Communications (Integration Hub).
+**Data model + API host only** (every table mapped, Swagger, health, event plumbing; no business endpoints yet): Operations & Supply Chain, and
+the merged parts digital engagement, imaging, back office and communications & documents.
 
 ## Run it
 ```bash
-# 1. databases (original scripts + extension + seed)
-cd database && PGHOST=localhost PGUSER=hims PGPassword=xv7o4aPKUqR6oEf5 ./deploy.sh && cd ..
+# 1. database himsdev (one schema per microservice + seed)
+cd database_v3 && PGHOST=localhost PGUSER=postgres PGPASSWORD=... HIMS_DB_PASSWORD=... ./deploy.sh && cd ..
 # 2. RabbitMQ, HAPI-FHIR, Open Integration Engine: yours (edit appsettings.json "RabbitMq", hub env vars)
 # 3. backends
-./scripts/run-dotnet-services.sh                       # Swagger at http://localhost:<port>/swagger
-cd services/integration && pip install -r requirements.txt && uvicorn app.main:app --port 5011   # http://localhost:5011/docs
+./scripts/backend.sh start --build                     # the 6 .NET services; Swagger at https://localhost:<port>/swagger
+./scripts/integration.sh start                          # integration-comms (Python): http://localhost:5011/docs
 # 4. frontends (one terminal each)   cd frontend/<zone> && npm install && npm run dev
 # 5. open http://localhost:3000  ->  "Load reference data"  ->  follow the workflow
 ```

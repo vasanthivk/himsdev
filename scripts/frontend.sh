@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Starts, stops or restarts all five Next.js frontend zones: shell (3000), patient-access-frontend
-# (3001), clinical-care-frontend (3002), laboratory-frontend (3003), revenue-cycle-frontend (3006).
+# Starts, stops or restarts all five Next.js frontend zones: shell (3000), patient-engagement-frontend
+# (3001), clinical-care-frontend (3002), diagnostics-frontend (3003), revenue-finance-frontend (3006).
 #
 #   ./scripts/frontend.sh start              install deps (if missing) + start everything
 #   ./scripts/frontend.sh start --install    force a fresh npm install first, then start
@@ -13,8 +13,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-declare -A PORTS=( [shell]=3000 [patient-access-frontend]=3001 [clinical-care-frontend]=3002 [laboratory-frontend]=3003 [revenue-cycle-frontend]=3006 )
-ZONES=(shell patient-access-frontend clinical-care-frontend laboratory-frontend revenue-cycle-frontend)
+declare -A PORTS=( [shell]=3000 [patient-engagement-frontend]=3001 [clinical-care-frontend]=3002 [diagnostics-frontend]=3003 [revenue-finance-frontend]=3006 )
+ZONES=(shell patient-engagement-frontend clinical-care-frontend diagnostics-frontend revenue-finance-frontend)
 mkdir -p logs .pids
 
 # ------------------------------------------------------------------------------------------------ helpers

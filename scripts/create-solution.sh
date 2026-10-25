@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates hims.sln (open it in Visual Studio / Rider) containing Hims.Common and all 12 .NET services.
+# Creates hims.sln (open it in Visual Studio / Rider) containing Hims.Common and the 6 .NET services.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 dotnet new sln -n hims --force

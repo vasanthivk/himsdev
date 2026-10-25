@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Starts, stops or restarts the five .NET workflow services: identity-org, patient-access,
-# clinical-care, revenue-cycle, laboratory.
+# Starts, stops or restarts the six .NET services of the consolidated architecture: identity-org, patient-engagement,
+# clinical-care, revenue-finance, diagnostics, operations-supply (the 7th, integration-comms, is Python).
 #
-# For the Python Integration Hub, use ./scripts/integration.sh instead - it's managed separately.
+# For integration-comms (the Python Integration Hub), use ./scripts/integration.sh instead - it's managed separately.
 #
 #   ./scripts/backend.sh start --build    build all .NET projects, then start everything
 #   ./scripts/backend.sh start            start everything, skipping the .NET build (fast)
@@ -15,9 +15,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DOTNET_SERVICES=(identity-org patient-access clinical-care revenue-cycle laboratory)
-ALL_DOTNET_PROJECTS=(identity-org patient-access clinical-care laboratory imaging pharmacy-supply revenue-cycle digital-engagement field-ops hospital-ops comms-docs back-office)
-PORTS_BY_SERVICE_DOTNET="identity-org=7010 patient-access=7001 clinical-care=7002 revenue-cycle=7006 laboratory=7003"   # HTTPS only (Kestrel:Endpoints in appsettings.json)
+DOTNET_SERVICES=(identity-org patient-engagement clinical-care revenue-finance diagnostics operations-supply)
+ALL_DOTNET_PROJECTS=(identity-org patient-engagement clinical-care diagnostics revenue-finance operations-supply)
+PORTS_BY_SERVICE_DOTNET="identity-org=7010 patient-engagement=7001 clinical-care=7002 revenue-finance=7006 diagnostics=7003 operations-supply=7005"   # HTTPS only (Kestrel:Endpoints in appsettings.json)
 mkdir -p logs .pids
 
 # ------------------------------------------------------------------------------------------------ helpers
@@ -81,9 +81,9 @@ do_start() {
   done
 
   echo
-  echo "Swagger (HTTPS only): https://localhost:7010 identity-org, 7001 patient-access, 7002 clinical-care, 7006 revenue-cycle, 7003 laboratory"
+  echo "Swagger (HTTPS only): https://localhost:7010 identity-org, 7001 patient-engagement, 7002 clinical-care, 7006 revenue-finance, 7003 diagnostics, 7005 operations-supply"
   echo "Logs: ./logs/<service>.log"
-  echo "(Integration Hub is managed separately: ./scripts/integration.sh start)"
+  echo "(integration-comms, the Python Integration Hub, is managed separately: ./scripts/integration.sh start)"
 }
 
 # ------------------------------------------------------------------------------------------------ status

@@ -1,10 +1,10 @@
 // The shell is the single public entry point (port 3000). It owns no pages of the workflow; it forwards each path prefix to the
 // zone (a separate Next.js app) that owns it - Next.js "multi-zones". Rewrites are read at BUILD time.
 const zones = {
-  '/patient-access': process.env.PATIENT_ACCESS_ZONE_URL,
+  '/patient-engagement': process.env.PATIENT_ENGAGEMENT_ZONE_URL,
   '/clinical-care': process.env.CLINICAL_CARE_ZONE_URL,
-  '/laboratory': process.env.LABORATORY_ZONE_URL,
-  '/revenue-cycle': process.env.REVENUE_CYCLE_ZONE_URL,
+  '/diagnostics': process.env.DIAGNOSTICS_ZONE_URL,
+  '/revenue-finance': process.env.REVENUE_FINANCE_ZONE_URL,
 };
 
 module.exports = {

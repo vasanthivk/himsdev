@@ -1,6 +1,6 @@
 # integration.sh — manage the Python Integration Hub
 
-Starts, stops and restarts the Integration Hub (`services/integration`) on port 5011, running it
+Starts, stops and restarts integration-comms, the Integration Hub (`services/integration-comms`) on port 5011, running it
 in the background and logging to a file — unlike `run-integration-hub.sh`, which runs it in the
 foreground for interactive debugging. Use whichever fits what you're doing (see below).
 
@@ -45,13 +45,13 @@ running quietly alongside everything else, `integration.sh` is the better fit.
 | Situation | Command |
 |---|---|
 | First time, or `.env`/`requirements.txt` changed | `start` (or `start --install` if you added a package) |
-| Code in `services/integration/app/` changed | `restart` (uvicorn doesn't hot-reload without `--reload`, which this script intentionally doesn't use, to match production-like behaviour) |
+| Code in `services/integration-comms/app/` changed | `restart` (uvicorn doesn't hot-reload without `--reload`, which this script intentionally doesn't use, to match production-like behaviour) |
 | Added a package to `requirements.txt` | `restart --install` |
 | "Is it up? What does /health say?" | `status` |
 
 ## What `start` actually does
 
-1. Checks `services/integration/.env` exists; if not, stops and tells you to create it
+1. Checks `services/integration-comms/.env` exists; if not, stops and tells you to create it
    (or restore it with `config_files/copy_config_files_to_app.sh`) first.
 2. Creates `.venv` if it doesn't exist yet (`python -m venv .venv`).
 3. Activates it (`.venv/Scripts/activate` on Windows, `.venv/bin/activate` elsewhere).

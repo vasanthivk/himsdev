@@ -21,29 +21,23 @@ config/
 ├── copy_to_app.sh      # config -> apps
 ├── CONFIG_README.md
 ├── services/
-│   ├── back-office/appsettings.json
 │   ├── clinical-care/appsettings.json
-│   ├── comms-docs/appsettings.json
-│   ├── digital-engagement/appsettings.json
-│   ├── field-ops/appsettings.json
-│   ├── hospital-ops/appsettings.json
+│   ├── diagnostics/appsettings.json
 │   ├── identity-org/appsettings.json
-│   ├── imaging/appsettings.json
-│   ├── integration/.env
-│   ├── laboratory/appsettings.json
-│   ├── patient-access/appsettings.json
-│   ├── pharmacy-supply/appsettings.json
-│   └── revenue-cycle/appsettings.json
+│   ├── integration-comms/.env
+│   ├── operations-supply/appsettings.json
+│   ├── patient-engagement/appsettings.json
+│   └── revenue-finance/appsettings.json
 └── frontend/
     ├── _shared/            (empty: no config files)
     ├── clinical-care-frontend/.env
-    ├── laboratory-frontend/.env
-    ├── patient-access-frontend/.env
-    ├── revenue-cycle-frontend/.env
+    ├── diagnostics-frontend/.env
+    ├── patient-engagement-frontend/.env
+    ├── revenue-finance-frontend/.env
     └── shell/.env
 ```
 
-The .NET services are configured through `appsettings.json`; the integration service (Python) and the frontend apps use `.env`.
+The .NET services are configured through `appsettings.json`; integration-comms (Python) and the frontend apps use `.env`.
 
 ## Collecting config from the applications
 

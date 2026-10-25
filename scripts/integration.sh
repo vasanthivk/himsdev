@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts, stops or restarts the Python Integration Hub (services/integration) on port 5011.
+# Starts, stops or restarts integration-comms, the Python Integration Hub (services/integration-comms), on port 5011.
 # Runs uvicorn in the background and, by default, tails its log to this terminal afterward so you
 # see output live (Ctrl+C stops watching the log - the hub keeps running). Pass --hidelogs to skip
 # that and just return control to the terminal immediately.
@@ -14,26 +14,26 @@
 #   ./scripts/integration.sh restart --install [--hidelogs]
 #   ./scripts/integration.sh status                  check /health
 #
-# Logs: ./logs/integration/dd-MM-yyyy.log (one file per day, written by the app)
-#       ./logs/integration/console.log  (raw stdout/stderr - startup errors before logging is set up)
-# PID:  ./.pids/integration.pid
+# Logs: ./logs/integration-comms/dd-MM-yyyy.log (one file per day, written by the app)
+#       ./logs/integration-comms/console.log  (raw stdout/stderr - startup errors before logging is set up)
+# PID:  ./.pids/integration-comms.pid
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-HUB_DIR="services/integration"
+HUB_DIR="services/integration-comms"
 HUB_PORT=5011
 HUB_HTTPS_PORT=7011   # served too when certs/hims-local.crt.pem + .key.pem exist (see scripts/BACKEND_README.md)
 CERT_DIR="certs"
-mkdir -p logs/integration .pids
+mkdir -p logs/integration-comms .pids
 
 # ------------------------------------------------------------------------------------------------ stop
 
 do_stop() {
   echo "== Stopping Integration Hub =="
-  local pidfile=".pids/integration.pid"
+  local pidfile=".pids/integration-comms.pid"
   if [ -f "$pidfile" ]; then
     local pid; pid=$(cat "$pidfile")
-    if kill "$pid" 2>/dev/null; then echo "  stopped integration (pid $pid)"; else echo "  integration (pid $pid) was not running"; fi
+    if kill "$pid" 2>/dev/null; then echo "  stopped integration-comms (pid $pid)"; else echo "  integration-comms (pid $pid) was not running"; fi
     rm -f "$pidfile"
   else
     echo "  no pid file"
@@ -85,19 +85,19 @@ do_start() {
     if [ -f "../../$CERT_DIR/hims-local.crt.pem" ] && [ -f "../../$CERT_DIR/hims-local.key.pem" ]; then
       export SSL_CERTFILE="${SSL_CERTFILE:-../../$CERT_DIR/hims-local.crt.pem}" SSL_KEYFILE="${SSL_KEYFILE:-../../$CERT_DIR/hims-local.key.pem}"
     fi
-    nohup python -m app.serve > "../../logs/integration/console.log" 2>&1 &
-    echo $! > "../../.pids/integration.pid"
+    nohup python -m app.serve > "../../logs/integration-comms/console.log" 2>&1 &
+    echo $! > "../../.pids/integration-comms.pid"
   )
-  echo "  started integration (pid $(cat .pids/integration.pid)) -> port $HUB_PORT"
+  echo "  started integration-comms (pid $(cat .pids/integration-comms.pid)) -> port $HUB_PORT"
   echo "Docs: http://localhost:$HUB_PORT/docs"
   [ -f "$CERT_DIR/hims-local.crt.pem" ] && echo "HTTPS: https://localhost:$HUB_HTTPS_PORT/docs"
 
   if [ "$hide_logs" = "hide" ]; then
-    echo "Logs hidden (--hidelogs). Watch later with: tail -F logs/integration/\$(date +%d-%m-%Y).log"
+    echo "Logs hidden (--hidelogs). Watch later with: tail -F logs/integration-comms/\$(date +%d-%m-%Y).log"
     return
   fi
 
-  local today_log="logs/integration/$(date +%d-%m-%Y).log"
+  local today_log="logs/integration-comms/$(date +%d-%m-%Y).log"
   echo "Tailing $today_log - Ctrl+C stops watching (the hub keeps running in the background)."
   echo
   sleep 1   # give uvicorn a moment to write its first lines before we start tailing
@@ -110,14 +110,14 @@ do_status() {
   echo "== Integration Hub =="
   local code; code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$HUB_PORT/health" 2>/dev/null || echo "000")
   if [ "$code" = "200" ]; then
-    echo "  integration (port $HUB_PORT): UP"
+    echo "  integration-comms (port $HUB_PORT): UP"
     curl -s "http://localhost:$HUB_PORT/health"
     echo
   else
-    echo "  integration (port $HUB_PORT): NOT RESPONDING (HTTP $code)"
+    echo "  integration-comms (port $HUB_PORT): NOT RESPONDING (HTTP $code)"
   fi
   code=$(curl -sk -o /dev/null -w "%{http_code}" "https://localhost:$HUB_HTTPS_PORT/health" 2>/dev/null || echo "000")
-  [ "$code" = "200" ] && echo "  integration https (port $HUB_HTTPS_PORT): UP" || echo "  integration https (port $HUB_HTTPS_PORT): NOT RESPONDING (HTTP $code)"
+  [ "$code" = "200" ] && echo "  integration-comms https (port $HUB_HTTPS_PORT): UP" || echo "  integration-comms https (port $HUB_HTTPS_PORT): NOT RESPONDING (HTTP $code)"
 }
 
 # ------------------------------------------------------------------------------------------------ main

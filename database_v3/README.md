@@ -78,8 +78,8 @@ The services in `services/` are configured for `himsdev`:
 
 | What | Where | How |
 |---|---|---|
-| Connection | `ConnectionStrings:Default` in each .NET service's `appsettings.json` (and `config/`); `DATABASE_URL` in `services/integration/.env` (and `config/`) | `Host=localhost;Port=5432;Database=himsdev;Username=hims` |
-| Service schema | `"Database": { "Schema": "<schema>" }` in `appsettings.json`; `DB_SCHEMA` in the Integration Hub's `.env` | identity-org: `identity_org`; patient-access, digital-engagement: `patient_engagement`; clinical-care: `clinical_care`; laboratory, imaging: `diagnostics`; revenue-cycle, back-office: `revenue_finance`; pharmacy-supply, hospital-ops, field-ops: `operations_supply`; integration, comms-docs: `integration_comms` |
+| Connection | `ConnectionStrings:Default` in each .NET service's `appsettings.json` (and `config/`); `DATABASE_URL` in `services/integration-comms/.env` (and `config/`) | `Host=localhost;Port=5432;Database=himsdev;Username=hims` |
+| Service schema | `"Database": { "Schema": "<schema>" }` in `appsettings.json`; `DB_SCHEMA` in the Integration Hub's `.env` | identity-org: `identity_org`; patient-engagement: `patient_engagement`; clinical-care: `clinical_care`; diagnostics: `diagnostics`; revenue-finance: `revenue_finance`; operations-supply: `operations_supply`; integration-comms: `integration_comms` |
 | EF entities (480) | `shared/Hims.Common/Data/HimsDbNames.cs`: `HimsModelCustomizer` | Maps the generated `[Table("organization", Schema = "core")]` to `identity_org.core_organization` at runtime. `Entities.g.cs` is unchanged. |
 | Outbox, inbox, sequences | `OutboxRelay.cs`, `EventConsumer.cs`, `SequenceService.cs` in `shared/Hims.Common` | Table names from `HimsDbNames` (`<schema>.evt_outbox`, `<schema>.evt_inbox`, `<schema>.core_number_sequence`) |
 | Raw SQL in Identity & Org | `UsersController.cs` (employee code) | Table name from the EF mapping |
@@ -92,9 +92,5 @@ Leaving `Database:Schema` (or `DB_SCHEMA`) empty switches a service back to a da
 Event payloads, `aggregate_type` values (e.g. `"hr.employee"`) and FHIR entity types (`"pat.patient"`) are data, not table names, and are
 unchanged.
 
-**Services that share a schema** (patient-access and digital-engagement, laboratory and imaging, revenue-cycle and back-office, and the three
-operations services) share one `evt_outbox`, `evt_inbox` and `core_number_sequence`.
-- **Outbox:** every event is published once (`FOR UPDATE SKIP LOCKED`).
-- **Inbox:** it is keyed by message id, so an event that both services subscribe to is handled by whichever gets it first. Today that is
-  only `EmployeeUpdated`, and both write the same `ref_employee`.
-- **Proper fix:** merge each group into one process (see `database_v2/README.md`).
+**One service per schema.** The services in `services/` are the 7 consolidated microservices, so each schema's outbox, inbox and
+number sequences belong to exactly one process.

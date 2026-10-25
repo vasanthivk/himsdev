@@ -1,10 +1,12 @@
 # docker compose up --build
+# The 7 consolidated microservices on one PostgreSQL database (himsdev, one schema per service - database_v3/) and RabbitMQ.
 # PostgreSQL + RabbitMQ are included so the stack is self-contained. You already run RabbitMQ / HAPI-FHIR / Open Integration Engine on a
 # server: delete the `rabbitmq` service and set RABBITMQ_HOST (and HAPI_FHIR_URL, ENGINE_URL) in a .env file instead.
 name: hims
 
 x-dotnet-env: &dotnet-env
   RabbitMq__Host: ${RABBITMQ_HOST:-rabbitmq}
+  RabbitMq__Port: "5672"
   RabbitMq__User: ${RABBITMQ_USER:-guest}
   RabbitMq__Password: ${RABBITMQ_PASSWORD:-guest}
 
@@ -21,12 +23,12 @@ services:
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U hims"], interval: 5s, timeout: 3s, retries: 20 }
 
-  db-init:      # runs database/deploy.sh: original scripts + extensions + seed, one database per microservice
+  db-init:      # runs database_v3/deploy.sh: database himsdev, one schema per microservice, plus seed data
     image: postgres:16
     depends_on: { postgres: { condition: service_healthy } }
-    volumes: ["./database:/database:ro"]
-    environment: { PGHOST: postgres, PGUSER: hims, PGPASSWORD: hims }
-    entrypoint: ["bash", "/database/deploy.sh"]
+    volumes: ["./database_v3:/database_v3:ro"]
+    environment: { PGHOST: postgres, PGUSER: hims, PGPASSWORD: hims, DB_NAME: himsdev }
+    entrypoint: ["bash", "/database_v3/deploy.sh"]
     restart: "no"
 
   rabbitmq:
@@ -36,63 +38,71 @@ services:
   identity-org:
     <<: *dotnet-service
     build: { context: ., dockerfile: services/identity-org/Dockerfile }
-    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=hims_identity_org;Username=hims;Password=xv7o4aPKUqR6oEf5" }
+    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=himsdev;Username=hims;Password=hims", Database__Schema: identity_org }
     ports: ["5010:8080"]
 
-  patient-access:
+  patient-engagement:
     <<: *dotnet-service
-    build: { context: ., dockerfile: services/patient-access/Dockerfile }
-    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=hims_patient_access;Username=hims;Password=xv7o4aPKUqR6oEf5" }
+    build: { context: ., dockerfile: services/patient-engagement/Dockerfile }
+    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=himsdev;Username=hims;Password=hims", Database__Schema: patient_engagement }
     ports: ["5001:8080"]
 
   clinical-care:
     <<: *dotnet-service
     build: { context: ., dockerfile: services/clinical-care/Dockerfile }
-    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=hims_clinical_care;Username=hims;Password=xv7o4aPKUqR6oEf5" }
+    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=himsdev;Username=hims;Password=hims", Database__Schema: clinical_care }
     ports: ["5002:8080"]
 
-  laboratory:
+  diagnostics:
     <<: *dotnet-service
-    build: { context: ., dockerfile: services/laboratory/Dockerfile }
+    build: { context: ., dockerfile: services/diagnostics/Dockerfile }
     environment:
       <<: *dotnet-env
-      ConnectionStrings__Default: "Host=postgres;Database=hims_laboratory;Username=hims;Password=xv7o4aPKUqR6oEf5"
-      IntegrationHub__BaseUrl: "http://integration:5011/"
+      ConnectionStrings__Default: "Host=postgres;Database=himsdev;Username=hims;Password=hims"
+      Database__Schema: diagnostics
+      IntegrationHub__BaseUrl: "http://integration-comms:5011/"
     ports: ["5003:8080"]
 
-  revenue-cycle:
+  revenue-finance:
     <<: *dotnet-service
-    build: { context: ., dockerfile: services/revenue-cycle/Dockerfile }
-    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=hims_revenue_cycle;Username=hims;Password=xv7o4aPKUqR6oEf5" }
+    build: { context: ., dockerfile: services/revenue-finance/Dockerfile }
+    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=himsdev;Username=hims;Password=hims", Database__Schema: revenue_finance }
     ports: ["5006:8080"]
 
-  integration:   # Python
-    build: { context: services/integration }
+  operations-supply:
+    <<: *dotnet-service
+    build: { context: ., dockerfile: services/operations-supply/Dockerfile }
+    environment: { <<: *dotnet-env, ConnectionStrings__Default: "Host=postgres;Database=himsdev;Username=hims;Password=hims", Database__Schema: operations_supply }
+    ports: ["5005:8080"]
+
+  integration-comms:   # Python
+    build: { context: services/integration-comms }
     depends_on: { db-init: { condition: service_completed_successfully } }
     environment:
-      DATABASE_URL: postgresql://hims:hims@postgres:5432/hims_integration
+      DATABASE_URL: postgresql://hims:hims@postgres:5432/himsdev
+      DB_SCHEMA: integration_comms
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@${RABBITMQ_HOST:-rabbitmq}:5672/%2F
       HAPI_FHIR_URL: ${HAPI_FHIR_URL:-http://103.169.179.22:50060/fhir}
       RABBITMQ_API_URL: ${RABBITMQ_API_URL:-http://${RABBITMQ_HOST:-rabbitmq}:15672}   # as the Open Integration Engine reaches it
       ENGINE_URL: ${ENGINE_URL:-}
       ENGINE_USER: ${ENGINE_USER:-admin}
       ENGINE_PASSWORD: ${ENGINE_PASSWORD:-admin}
-      HUB_PUBLIC_URL: http://integration:5011
+      HUB_PUBLIC_URL: http://integration-comms:5011
     extra_hosts: ["host.docker.internal:host-gateway"]
     ports: ["5011:5011"]
     restart: unless-stopped
 
-  patient-access-frontend:
-    build: { context: frontend, dockerfile: Dockerfile, args: { ZONE: patient-access-frontend } }
+  patient-engagement-frontend:
+    build: { context: frontend, dockerfile: Dockerfile, args: { ZONE: patient-engagement-frontend } }
     ports: ["3001:3001"]
   clinical-care-frontend:
     build: { context: frontend, dockerfile: Dockerfile, args: { ZONE: clinical-care-frontend } }
     ports: ["3002:3002"]
-  laboratory-frontend:
-    build: { context: frontend, dockerfile: Dockerfile, args: { ZONE: laboratory-frontend } }
+  diagnostics-frontend:
+    build: { context: frontend, dockerfile: Dockerfile, args: { ZONE: diagnostics-frontend } }
     ports: ["3003:3003"]
-  revenue-cycle-frontend:
-    build: { context: frontend, dockerfile: Dockerfile, args: { ZONE: revenue-cycle-frontend } }
+  revenue-finance-frontend:
+    build: { context: frontend, dockerfile: Dockerfile, args: { ZONE: revenue-finance-frontend } }
     ports: ["3006:3006"]
   shell:          # public entry point: http://localhost:3000
     build:
@@ -100,12 +110,12 @@ services:
       dockerfile: Dockerfile
       args:
         ZONE: shell
-        PATIENT_ACCESS_ZONE_URL: http://patient-access-frontend:3001
+        PATIENT_ENGAGEMENT_ZONE_URL: http://patient-engagement-frontend:3001
         CLINICAL_CARE_ZONE_URL: http://clinical-care-frontend:3002
-        LABORATORY_ZONE_URL: http://laboratory-frontend:3003
-        REVENUE_CYCLE_ZONE_URL: http://revenue-cycle-frontend:3006
+        DIAGNOSTICS_ZONE_URL: http://diagnostics-frontend:3003
+        REVENUE_FINANCE_ZONE_URL: http://revenue-finance-frontend:3006
     ports: ["3000:3000"]
-    depends_on: [patient-access-frontend, clinical-care-frontend, laboratory-frontend, revenue-cycle-frontend]
+    depends_on: [patient-engagement-frontend, clinical-care-frontend, diagnostics-frontend, revenue-finance-frontend]
 
 volumes:
   pgdata:
