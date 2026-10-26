@@ -9,6 +9,12 @@ a { color:var(--brand); }
 .nav nav a { padding:6px 12px; border-radius:6px; text-decoration:none; color:var(--ink); }
 .nav nav a:hover { background:var(--bg); }
 .nav nav a.active { background:var(--brand); color:#fff; }
+/* Page tabs inside one zone (e.g. Patient Access: Register patient | Find patient / Start visit) */
+.subnav { display:flex; flex-wrap:wrap; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px; }
+.subnav a { padding:8px 14px; text-decoration:none; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; }
+.subnav a:hover { color:var(--ink); }
+.subnav a.active { color:var(--brand-d); border-bottom-color:var(--brand); font-weight:600; }
+.subnav a:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
 .nav .profile { margin-left:auto; position:relative; }
 .avatar { width:36px; height:36px; padding:0; border-radius:50%; background:var(--brand); color:#fff; font-weight:600; font-size:14px; display:inline-flex; align-items:center; justify-content:center; border:none; cursor:pointer; }
 .avatar.large { width:44px; height:44px; font-size:16px; cursor:default; flex:none; }
