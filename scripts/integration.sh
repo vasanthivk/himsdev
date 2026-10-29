@@ -78,7 +78,7 @@ do_start() {
 
     set -a; source .env; set +a
     echo "  RABBITMQ_URL=$RABBITMQ_URL"
-    echo "  DATABASE_URL=$DATABASE_URL"
+    env | grep -E "^[A-Z0-9_]+_DATABASE_URL=" | sort | sed "s/^/  /"   # one database per tenant (REDDYS_DATABASE_URL, APOLLO_...)
 
     # HTTP on HUB_PORT, plus HTTPS on HUB_HTTPS_PORT when the certificate exists (app/serve.py runs both in one process).
     export HUB_PORT HUB_HTTPS_PORT

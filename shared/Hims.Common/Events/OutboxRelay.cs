@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using Hims.Common.Data;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,10 +10,11 @@ using RabbitMQ.Client;
 namespace Hims.Common.Events;
 
 /// <summary>
-/// Transactional-outbox relay. Polls <c>evt.outbox</c> for rows with <c>published_at IS NULL</c>, publishes each to the
-/// <c>hims.events</c> topic exchange (routing key = event_type) with publisher confirms, then stamps
+/// Transactional-outbox relay. Polls <c>evt.outbox</c> for rows with <c>published_at IS NULL</c>, publishes each to its tenant's
+/// topic exchange (<c>hims.reddys.events</c>, <c>hims.apollo.events</c>; routing key = event_type) with publisher confirms, then stamps
 /// <c>published_at</c>. This replaces the "relay to Azure Service Bus" mentioned in the data model with RabbitMQ.
-/// Uses SELECT ... FOR UPDATE SKIP LOCKED so several instances of a service can run safely.
+/// Uses SELECT ... FOR UPDATE SKIP LOCKED so several instances of a service can run safely. Every tenant database has its own
+/// outbox and its own exchange; each pass relays a batch from each of them.
 /// </summary>
 public sealed class OutboxRelay : BackgroundService
 {
@@ -22,22 +22,22 @@ public sealed class OutboxRelay : BackgroundService
     private readonly ILogger<OutboxRelay> _log;
     private readonly EventBusOptions _bus;
     private readonly HimsServiceInfo _svc;
-    private readonly string _connectionString;
+    private readonly HimsTenants _tenants;
     private readonly string _outbox;   // evt.outbox, or <service schema>.evt_outbox in the shared database
 
-    public OutboxRelay(IConfiguration config, IOptions<EventBusOptions> bus, HimsServiceInfo svc, HimsDbNames names, ILogger<OutboxRelay> log)
+    public OutboxRelay(HimsTenants tenants, IOptions<EventBusOptions> bus, HimsServiceInfo svc, HimsDbNames names, ILogger<OutboxRelay> log)
     {
         _log = log;
         _outbox = names.Table("evt", "outbox");
         _bus = bus.Value;
         _svc = svc;
-        _connectionString = config.GetConnectionString("Default") ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured");
+        _tenants = tenants;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_bus.Enabled) { _log.LogInformation("Event bus disabled; outbox relay not started"); return; }
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var dataSources = _tenants.All.Select(t => (t.Name, Source: NpgsqlDataSource.Create(t.ConnectionString))).ToList();
         IConnection? connection = null;
         IModel? channel = null;
 
@@ -51,11 +51,12 @@ public sealed class OutboxRelay : BackgroundService
                     var factory = new ConnectionFactory { HostName = _bus.Host, Port = _bus.Port, UserName = _bus.User, Password = _bus.Password, VirtualHost = _bus.VirtualHost };
                     connection = factory.CreateConnection($"{_svc.Name}-outbox");
                     channel = connection.CreateModel();
-                    channel.ExchangeDeclare(_bus.Exchange, ExchangeType.Topic, durable: true);
+                    foreach (var (tenant, _) in dataSources) channel.ExchangeDeclare(_bus.ExchangeFor(tenant), ExchangeType.Topic, durable: true);
                     channel.ConfirmSelect();
                 }
 
-                var published = await RelayBatchAsync(dataSource, channel, stoppingToken);
+                var published = 0;
+                foreach (var (tenant, source) in dataSources) published += await RelayBatchAsync(tenant, source, channel, stoppingToken);
                 if (published == 0) await Task.Delay(TimeSpan.FromMilliseconds(700), stoppingToken);
             }
             catch (OperationCanceledException) { break; }
@@ -67,9 +68,10 @@ public sealed class OutboxRelay : BackgroundService
             }
         }
         channel?.Dispose(); connection?.Dispose();
+        foreach (var (_, source) in dataSources) await source.DisposeAsync();
     }
 
-    private async Task<int> RelayBatchAsync(NpgsqlDataSource ds, IModel channel, CancellationToken ct)
+    private async Task<int> RelayBatchAsync(string tenant, NpgsqlDataSource ds, IModel channel, CancellationToken ct)
     {
         await using var conn = await ds.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
@@ -127,7 +129,7 @@ public sealed class OutboxRelay : BackgroundService
                 props.MessageId = m.EventId.ToString();
                 props.Type = m.Type;
                 props.AppId = _svc.Name;
-                channel.BasicPublish(_bus.Exchange, m.Type, props, m.Body);
+                channel.BasicPublish(_bus.ExchangeFor(tenant), m.Type, props, m.Body);
             }
             channel.WaitForConfirmsOrDie(TimeSpan.FromSeconds(10));
         }
@@ -144,7 +146,7 @@ public sealed class OutboxRelay : BackgroundService
             await upd.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
-        _log.LogInformation("Published {Count} event(s) from outbox", messages.Count);
+        _log.LogInformation("Published {Count} event(s) from the {Tenant} outbox to {Exchange}", messages.Count, tenant, _bus.ExchangeFor(tenant));
         return messages.Count;
     }
 

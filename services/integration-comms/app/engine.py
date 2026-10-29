@@ -142,10 +142,11 @@ def rabbitmq_publish_target() -> Optional[dict]:
             "RABBITMQ_USER": unquote(amqp.username or "guest"), "RABBITMQ_PASSWORD": unquote(amqp.password or "guest")}
 
 
-def provision_interface(*, analyzer_id: int, code: str, name: str, protocol: str, sending_app: Optional[str],
+def provision_interface(*, analyzer_id: int, code: str, name: str, protocol: str, sending_app: Optional[str], tenant: str,
                         engine: Optional[OpenIntegrationEngine] = None, config: Optional[EngineConfig] = None) -> dict:
-    """Returns {channelId, routingKey, status: PROVISIONED|PENDING|FAILED, message}. Never raises: Laboratory stores the status."""
-    routing_key = f"lab.results.{slug(code)}"
+    """Returns {channelId, routingKey, status: PROVISIONED|PENDING|FAILED, message}. Never raises: Laboratory stores the status.
+    The routing key names the tenant (lab.results.<tenant>.<analyzer>), so the device's results stay in that tenant's database."""
+    routing_key = f"lab.results.{tenant}.{slug(code)}"
     config = config or (engine.config if engine else EngineConfig.resolve())
 
     def result(status: str, message: str, channel_id: str = "") -> dict:
@@ -163,7 +164,7 @@ def provision_interface(*, analyzer_id: int, code: str, name: str, protocol: str
         "ANALYZER_ID": analyzer_id, "ANALYZER_CODE": code, "ANALYZER_NAME": name, "PROTOCOL": protocol,
         "SENDING_APPLICATION_ID": sending_app or code, "LISTEN_PORT": listen_port, "CONTEXT_PATH": context_path,
         "ROUTING_KEY": routing_key, "RABBITMQ_URI": settings.rabbitmq_url, "RABBITMQ_EXCHANGE": settings.integration_exchange,
-        "HUB_INBOUND_URL": f"{settings.hub_public_url}/api/inbound?analyzer={code}", "CHANNEL_NAME": channel_name,
+        "HUB_INBOUND_URL": f"{settings.hub_public_url}/api/inbound?analyzer={code}&tenant={tenant}", "CHANNEL_NAME": channel_name,
     }
     try:
         ids = engine.channel_ids_by_name()

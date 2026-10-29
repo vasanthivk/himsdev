@@ -1,6 +1,7 @@
 """
-Integration Hub subscriber: consumes hims.events, keeps this service's ref.* copies current and mirrors clinical data to the
-FHIR server (HAPI), recording every relational-row <-> FHIR-resource link in intg.fhir_resource_map.
+Integration Hub subscriber: consumes each tenant's exchange (hims.reddys.events, hims.apollo.events), keeps this service's ref.* copies current and mirrors clinical data to the
+FHIR server (HAPI), recording every relational-row <-> FHIR-resource link in intg.fhir_resource_map. Each event is handled in its
+organization's database and synced to its organization's FHIR server (reddys -> hims_reddys + /reddys/fhir, apollo -> ...).
 
 Idempotent consumer, like the .NET services: evt.inbox insert + ref upsert + FHIR push + inbox update happen in ONE database
 transaction. A duplicate event is skipped; a failure (FHIR server down, patient not yet synced) rolls everything back and the
@@ -12,8 +13,8 @@ from typing import Callable, Optional
 
 from . import db
 from . import fhir_map as fm
-from .config import settings
-from .fhir_client import FhirClient
+from .config import Tenant, settings
+from .fhir_client import FhirClient, FhirError
 
 log = logging.getLogger("hub.fhirsync")
 
@@ -142,26 +143,47 @@ HANDLERS: dict = {
     "OrderPlaced": on_order_placed, "PrescriptionIssued": on_prescription, "LabReportReleased": on_lab_report,
 }
 
-_client: Optional[FhirClient] = None
+_clients: dict = {}   # FHIR base URL -> FhirClient
 
 
-def default_client() -> Optional[FhirClient]:
-    global _client
+def tenants() -> dict:
+    """organization_id -> Tenant (REDDYS_ORGANIZATION_ID / REDDYS_DATABASE_URL / REDDYS_FHIR_URL, APOLLO_..., in .env)."""
+    return {t.organization_id: t for t in db.tenants()}
+
+
+def tenant_for(env: dict) -> Tenant:
+    """The tenant of the event, found from its organizationId (Reddy's -> reddys, Apollo -> apollo)."""
+    org = env.get("organizationId")
+    tenant = db.tenant_for_organization(org)
+    if tenant is None:
+        raise FhirError(f"No tenant configured for organization {org} (set <SUBDOMAIN>_ORGANIZATION_ID and <SUBDOMAIN>_DATABASE_URL)")
+    return tenant
+
+
+def client_for(tenant: Tenant) -> Optional[FhirClient]:
+    """The tenant's FHIR server; HAPI_FHIR_URL when the tenant has none."""
     if not settings.fhir_sync_enabled:
         return None
-    if _client is None:
-        _client = FhirClient()
-    return _client
+    url = tenant.fhir_url or settings.hapi_fhir_url
+    if not url:
+        raise FhirError(f"No FHIR server configured for {tenant.subdomain} (set {tenant.subdomain.upper()}_FHIR_URL)")
+    if url not in _clients:
+        _clients[url] = FhirClient(url)
+    return _clients[url]
 
 
-def handle_event(body: bytes, routing_key: str, fhir: Optional[FhirClient] = None) -> None:
+def handle_event(body: bytes, routing_key: str, fhir: Optional[FhirClient] = None, queue_tenant: Optional[Tenant] = None) -> None:
+    """queue_tenant: the tenant whose exchange the event came from; the event's organizationId must agree with it."""
     env = json.loads(body)
     etype = env.get("type") or routing_key
     fn: Optional[Callable] = HANDLERS.get(etype)
     if fn is None:
         return
-    client = fhir if fhir is not None else default_client()
-    with db.tx() as conn:
+    tenant = tenant_for(env)
+    if queue_tenant is not None and tenant.subdomain != queue_tenant.subdomain:
+        raise FhirError(f"{etype} {env.get('id')} is for {tenant.subdomain} but came from {settings.exchange_for(queue_tenant.subdomain)}")
+    client = fhir if fhir is not None else client_for(tenant)
+    with db.using(tenant), db.tx() as conn:
         first_time = conn.execute(
             f"INSERT INTO {db.table('evt', 'inbox')} (message_id, event_type, source_service) VALUES (%s, %s, %s) ON CONFLICT (message_id) DO NOTHING RETURNING message_id",
             (env["id"], etype, env.get("source", "unknown"))).fetchone()
@@ -170,4 +192,4 @@ def handle_event(body: bytes, routing_key: str, fhir: Optional[FhirClient] = Non
             return
         fn(Ctx(conn, client, env), env["data"])
         conn.execute(f"UPDATE {db.table('evt', 'inbox')} SET process_status = 'PROCESSED', processed_at = now() WHERE message_id = %s", (env["id"],))
-    log.info("Handled %s %s", etype, env["id"])
+    log.info("Handled %s %s (%s)", etype, env["id"], tenant.subdomain)

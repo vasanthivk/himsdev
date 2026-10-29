@@ -17,18 +17,23 @@ namespace Hims.Common.Http;
 public static class HimsServiceExtensions
 {
     /// <summary>
-    /// Registers: the service's DbContext (PostgreSQL), controllers with the HIMS JSON convention, Swagger, CORS, the shared
+    /// Registers: the service's DbContext (PostgreSQL, one database per tenant), controllers with the HIMS JSON convention, Swagger, CORS, the shared
     /// SequenceService, the outbox relay and the event consumer.
     /// </summary>
     public static WebApplicationBuilder AddHimsService<TDb>(this WebApplicationBuilder builder, string serviceName, string title, string description)
         where TDb : DbContext
     {
-        var connectionString = builder.Configuration.GetConnectionString("Default")
-            ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured");
+        // One database per tenant (ConnectionStrings:<tenant> + Tenants): each request or event opens the DbContext on the
+        // database of its organization (see HimsTenantContext). Fails at startup when a tenant has no connection string.
+        var tenants = new HimsTenants(builder.Configuration);
+        builder.Services.AddSingleton(tenants);
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<HimsTenantContext>();
 
         // Database:Schema set = the shared database (himsdev), tables named <service schema>.<schema>_<table> (see HimsDbNames).
         builder.Services.AddSingleton<HimsDbNames>();
-        builder.Services.AddDbContext<TDb>(o => o.UseNpgsql(connectionString).ReplaceService<IModelCustomizer, HimsModelCustomizer>());
+        builder.Services.AddDbContext<TDb>((sp, o) => o.UseNpgsql(sp.GetRequiredService<HimsTenantContext>().Current.ConnectionString)
+            .ReplaceService<IModelCustomizer, HimsModelCustomizer>());
         builder.Services.AddSingleton(new HimsServiceInfo(serviceName, title, description));
         builder.Services.Configure<EventBusOptions>(builder.Configuration.GetSection("RabbitMq"));
         builder.Services.AddScoped<ISequenceService, SequenceService>();
@@ -88,11 +93,20 @@ public static class HimsServiceExtensions
         app.UseCors("frontends");
         app.UseHimsAuth();
         app.MapControllers();
-        app.MapGet("/health", async (TDb db) =>
+        // database = every tenant's database answers; databases = per tenant, e.g. {"reddys": true, "apollo": true}.
+        app.MapGet("/health", async (IServiceProvider sp, HimsTenants tenants) =>
         {
-            var dbUp = false;
-            try { dbUp = await db.Database.CanConnectAsync(); } catch { /* reported below */ }
-            return Results.Json(new { service = info.Name, status = dbUp ? "healthy" : "degraded", database = dbUp });
+            var databases = new Dictionary<string, bool>();
+            foreach (var tenant in tenants.All)
+            {
+                await using var scope = sp.CreateAsyncScope();
+                scope.ServiceProvider.GetRequiredService<HimsTenantContext>().Use(tenant);
+                var up = false;
+                try { up = await scope.ServiceProvider.GetRequiredService<TDb>().Database.CanConnectAsync(); } catch { /* reported below */ }
+                databases[tenant.Name] = up;
+            }
+            var dbUp = databases.Values.All(v => v);
+            return Results.Json(new { service = info.Name, status = dbUp ? "healthy" : "degraded", database = dbUp, databases });
         }).AllowAnonymous();
         app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
         return app;

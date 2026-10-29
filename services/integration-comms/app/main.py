@@ -2,9 +2,9 @@
 HIMS Integration Hub (data-model service 11) - FastAPI app + background workers.
 
 Workers (started with the app when RABBITMQ_ENABLED=true):
-  * outbox relay    evt.outbox -> RabbitMQ exchange hims.events            (publishes AnalyzerResultReceived)
+  * outbox relay    each tenant's evt.outbox -> its exchange hims.<tenant>.events (publishes AnalyzerResultReceived)
   * device consumer RabbitMQ queue lab.results  -> parse HL7 v2/v3/FHIR -> message_log + outbox
-  * FHIR sync       RabbitMQ queue integration-comms.events (domain events) -> ref.* + HAPI FHIR + intg.fhir_resource_map
+  * FHIR sync       one queue per tenant, integration-comms.<tenant>.events (domain events) -> ref.* + the tenant's FHIR + intg.fhir_resource_map
 HTTP API: provision a device channel in the Open Integration Engine, HTTP inbound for engines that POST, message log, FHIR map, simulator.
 """
 import asyncio
@@ -37,24 +37,35 @@ workers: dict = {}
 
 
 def handle_device_message(body: bytes, routing_key: str) -> None:
-    """Message from the Open Integration Engine. Routing key lab.results.<analyzer> is only a fallback id; the device's own id wins."""
+    """Message from the Open Integration Engine, routing key lab.results.<tenant>.<analyzer>: the tenant decides the database.
+    The analyzer part is only a fallback id; the device's own id wins. lab.results.<analyzer> (no tenant) = channel from before tenants."""
     raw = body.decode("utf-8", errors="replace")
-    hint = routing_key.rsplit(".", 1)[-1] if routing_key.startswith("lab.results.") else None
-    process_inbound(raw, analyzer_hint=hint, source="ENGINE")   # parse errors are logged as FAILED (no retry); DB errors raise -> retried
+    parts = routing_key.split(".")[2:] if routing_key.startswith("lab.results.") else []
+    tenant = db.tenant_for_subdomain(parts[0]) if len(parts) >= 2 else None
+    if tenant is None and parts:
+        log.warning("Device message with routing key %s names no tenant; Laboratory will look the sample up in every tenant", routing_key)
+    hint = parts[-1] if parts else None
+    process_inbound(raw, analyzer_hint=hint, source="ENGINE", tenant=tenant)   # parse errors are logged as FAILED (no retry); DB errors raise -> retried
 
 
-def handle_domain_event(body: bytes, routing_key: str) -> None:
-    fhir_sync.handle_event(body, routing_key)
+def domain_event_handler(tenant):
+    """Handler for the tenant's queue: the event is processed in that tenant's database and FHIR server."""
+    return lambda body, routing_key: fhir_sync.handle_event(body, routing_key, queue_tenant=tenant)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    for t in db.tenants():   # fails at startup when a tenant is half configured
+        log.info("Tenant %s (organization %s): database %s, FHIR %s", t.subdomain, t.organization_id,
+                 urlparse(t.database_url).path.lstrip("/"), t.fhir_url or settings.hapi_fhir_url or "-")
     if settings.rabbitmq_enabled:
         workers["relay"] = bus.OutboxRelay(stop_event)
         workers["device"] = bus.Consumer("device-results", settings.results_queue, [(settings.integration_exchange, "lab.results.#")],
                                          handle_device_message, stop_event, topology=bus.declare_device_topology)
-        workers["fhir"] = bus.Consumer("fhir-sync", settings.events_queue, [(settings.events_exchange, t) for t in fhir_sync.SUBSCRIBED],
-                                       handle_domain_event, stop_event)
+        for t in db.tenants():
+            workers[f"fhir-{t.subdomain}"] = bus.Consumer(f"fhir-sync-{t.subdomain}", settings.queue_for(t.subdomain),
+                                                          [(settings.exchange_for(t.subdomain), e) for e in fhir_sync.SUBSCRIBED],
+                                                          domain_event_handler(t), stop_event)
         for w in workers.values():
             w.start()
     else:
@@ -70,6 +81,23 @@ app = FastAPI(title="HIMS Integration Hub", version="1.0",
 app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins), allow_origin_regex=settings.cors_origin_regex or None, allow_methods=["*"], allow_headers=["*"])
 
 
+def request_subdomain(request: Request) -> Optional[str]:
+    """First label of the browser's Origin (or Referer) host: https://apollo.localhost:3000 -> "apollo". None from curl/Postman."""
+    for header in ("origin", "referer"):
+        host = urlparse(request.headers.get(header, "")).hostname
+        if host:
+            labels = host.split(".")
+            return labels[0].lower() if len(labels) > 1 else None
+    return None
+
+
+@app.middleware("http")
+async def tenant_database(request: Request, call_next):
+    """The API works on the database of the frontend's tenant (subdomain); without one, the default tenant (the first)."""
+    with db.using(db.tenant_for_subdomain(request_subdomain(request)) or db.tenants()[0]):
+        return await call_next(request)
+
+
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse("/docs")
@@ -77,17 +105,21 @@ def root():
 
 @app.get("/health")
 def health(deep: bool = False):
-    db_ok = False
-    try:
-        with db.pool().connection() as c:
-            c.execute("SELECT 1")
-        db_ok = True
-    except Exception:
-        pass
+    databases = {}
+    for tenant in db.tenants():
+        try:
+            with db.pool(tenant).connection() as c:
+                c.execute("SELECT 1")
+            databases[tenant.subdomain] = True
+        except Exception:
+            databases[tenant.subdomain] = False
+    db_ok = all(databases.values())
     return {
-        "service": "integration-comms", "status": "healthy" if db_ok else "degraded", "database": db_ok,
+        "service": "integration-comms", "status": "healthy" if db_ok else "degraded", "database": db_ok, "databases": databases,
         "workers": {name: (w.connected if hasattr(w, "connected") else w.is_alive()) for name, w in workers.items()},
-        "fhir": (FhirClient().ping() if deep and settings.fhir_sync_enabled else None),
+        # ?deep=true: whether each tenant's FHIR server answers, e.g. {"reddys": true, "apollo": true}
+        "fhir": ({t.subdomain: FhirClient(t.fhir_url or settings.hapi_fhir_url).ping() for t in db.tenants()}
+                 if deep and settings.fhir_sync_enabled else None),
     }
 
 
@@ -123,7 +155,7 @@ def create_interface(req: InterfaceRequest):
     config = EngineConfig.resolve(url=req.engineUrl, user=req.engineUser, password=req.enginePassword, verify_tls=req.engineVerifyTls,
                                   listen_port=req.engineFirstListenPort)
     result = provision_interface(analyzer_id=req.analyzerId, code=req.analyzerCode, name=req.analyzerName, protocol=req.protocol.upper(),
-                                 sending_app=req.sendingApplicationId, config=config)
+                                 sending_app=req.sendingApplicationId, tenant=db.current().subdomain, config=config)
     with db.tx() as conn:
         db.log_message(conn, interface_code=req.protocol.upper()[:30], direction="OUT", message_type="CHANNEL_PROVISION", correlation_id=req.analyzerCode[:100],
                        entity_type="lab.analyzer", entity_id=req.analyzerId, status="PROCESSED" if result["status"] == "PROVISIONED" else result["status"],
@@ -132,11 +164,14 @@ def create_interface(req: InterfaceRequest):
 
 
 @app.post("/api/inbound", tags=["Devices"])
-async def inbound(request: Request, analyzer: Optional[str] = None):
-    """HTTP alternative to RabbitMQ: the engine's HTTP Sender (or curl) posts the raw HL7 v2 / HL7 v3 / FHIR message as the body.
-    HL7 v2 gets an HL7 ACK (AA/AE) back; other formats get JSON."""
+async def inbound(request: Request, analyzer: Optional[str] = None, tenant: Optional[str] = None):
+    """HTTP alternative to RabbitMQ: the engine's HTTP Sender (or curl) posts the raw HL7 v2 / HL7 v3 / FHIR message as the body,
+    with ?tenant=<subdomain> (the channel's tenant). HL7 v2 gets an HL7 ACK (AA/AE) back; other formats get JSON."""
     raw = (await request.body()).decode("utf-8", errors="replace")
-    result = process_inbound(raw, analyzer_hint=analyzer, source="HTTP")
+    t = db.tenant_for_subdomain(tenant)
+    if tenant and t is None:
+        raise HTTPException(422, f"Unknown tenant '{tenant}'")
+    result = process_inbound(raw, analyzer_hint=analyzer, source="HTTP", tenant=t)
     if raw.lstrip("\x0b\ufeff \r\n").startswith("MSH"):
         return PlainTextResponse(build_hl7v2_ack(raw, result.ok, result.error or ""), media_type="text/plain")
     if not result.ok:
@@ -287,9 +322,9 @@ async def simulate(req: SimulateRequest):
                 "engineHttpStatus": resp.status_code, "preview": raw[:600]}
 
     if via == "rabbitmq":
-        bus.publish_device_message(raw, req.analyzerCode)
+        bus.publish_device_message(raw, req.analyzerCode, db.current().subdomain)   # the frontend's tenant
         return {"delivered": "rabbitmq", "messageId": message_id, "format": req.format.upper(), "preview": raw[:600]}
 
-    result = process_inbound(raw, source="SIMULATOR")
+    result = process_inbound(raw, source="SIMULATOR", tenant=db.current())
     return {"delivered": "direct", "messageId": message_id, "accepted": result.ok, "error": result.error, "messageLogId": result.message_log_id}
 

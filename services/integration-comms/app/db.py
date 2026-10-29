@@ -1,23 +1,64 @@
-"""PostgreSQL access (psycopg 3 pool) plus the two pieces of the data model's evt schema this service uses."""
+"""PostgreSQL access (psycopg 3 pool per tenant database) plus the two pieces of the data model's evt schema this service uses.
+
+Every tenant has its own database (<SUBDOMAIN>_DATABASE_URL). The tenant of the current unit of work is a context variable:
+using(tenant) sets it (event handlers, outbox relay, HTTP requests); pool() and tx() then open that tenant's database.
+"""
 import json
+import threading
 import uuid
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Iterator, Optional
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
-from .config import settings
+from .config import Tenant, load_tenants, settings
 
-_pool: Optional[ConnectionPool] = None
+_pools: dict = {}                    # subdomain -> ConnectionPool
+_pools_lock = threading.Lock()       # the workers are threads
+_tenants: Optional[list] = None
+_current: ContextVar[Optional[Tenant]] = ContextVar("tenant", default=None)
 
 
-def pool() -> ConnectionPool:
-    global _pool
-    if _pool is None:
-        _pool = ConnectionPool(settings.database_url, min_size=1, max_size=8, kwargs={"row_factory": dict_row}, open=True)
-    return _pool
+def tenants() -> list:
+    """All tenants, ordered by organization id (the first is the default)."""
+    global _tenants
+    if _tenants is None:
+        _tenants = load_tenants()
+    return _tenants
+
+
+def tenant_for_organization(organization_id: Optional[int]) -> Optional[Tenant]:
+    return next((t for t in tenants() if t.organization_id == organization_id), None)
+
+
+def tenant_for_subdomain(subdomain: Optional[str]) -> Optional[Tenant]:
+    return next((t for t in tenants() if subdomain and t.subdomain == subdomain.lower()), None)
+
+
+def current() -> Tenant:
+    """The tenant of this unit of work; the default tenant when none was set (e.g. a device message, a call from curl)."""
+    return _current.get() or tenants()[0]
+
+
+@contextmanager
+def using(tenant: Tenant) -> Iterator[Tenant]:
+    """Runs the block against this tenant's database."""
+    token = _current.set(tenant)
+    try:
+        yield tenant
+    finally:
+        _current.reset(token)
+
+
+def pool(tenant: Optional[Tenant] = None) -> ConnectionPool:
+    t = tenant or current()
+    with _pools_lock:
+        if t.subdomain not in _pools:
+            _pools[t.subdomain] = ConnectionPool(t.database_url, min_size=1, max_size=8, kwargs={"row_factory": dict_row}, open=True)
+        return _pools[t.subdomain]
 
 
 def table(schema: str, name: str) -> str:
@@ -26,10 +67,10 @@ def table(schema: str, name: str) -> str:
 
 
 def close_pool() -> None:
-    global _pool
-    if _pool is not None:
-        _pool.close()
-        _pool = None
+    with _pools_lock:
+        for p in _pools.values():
+            p.close()
+        _pools.clear()
 
 
 @contextmanager

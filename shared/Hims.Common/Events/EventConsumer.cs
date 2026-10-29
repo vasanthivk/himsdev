@@ -11,11 +11,12 @@ using RabbitMQ.Client.Events;
 namespace Hims.Common.Events;
 
 /// <summary>
-/// Idempotent consumer. Declares the queue <c>&lt;service&gt;.events</c>, binds it to exactly the event types that have a
-/// registered <see cref="IEventHandler"/>, and for every message runs, in ONE database transaction:
+/// Idempotent consumer. For every tenant, declares the queue <c>&lt;service&gt;.&lt;tenant&gt;.events</c> (e.g.
+/// diagnostics.apollo.events), binds it on that tenant's exchange (hims.apollo.events) to exactly the event types that have a
+/// registered <see cref="IEventHandler"/>, and for every message runs, in ONE database transaction of that tenant's database:
 ///   insert into evt.inbox (ON CONFLICT DO NOTHING)  ->  handlers  ->  mark inbox PROCESSED.
 /// A redelivered event is detected by evt.inbox.message_id and skipped. Failures are retried a few times (a ref table may
-/// not have caught up yet) and then dead-lettered to <c>&lt;service&gt;.events.dlq</c>.
+/// not have caught up yet) and then dead-lettered to <c>&lt;service&gt;.&lt;tenant&gt;.events.dlq</c>.
 /// If a service registers no handlers, this consumer does nothing.
 /// </summary>
 public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
@@ -64,37 +65,41 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         };
         using var connection = factory.CreateConnection($"{_svc.Name}-consumer");
         using var channel = connection.CreateModel();
-
-        var queue = $"{_svc.Name}.events";
-        var dlq = $"{queue}.dlq";
-        channel.ExchangeDeclare(_bus.Exchange, ExchangeType.Topic, durable: true);
         channel.ExchangeDeclare(DeadLetterExchange, ExchangeType.Direct, durable: true);
-        channel.QueueDeclare(dlq, durable: true, exclusive: false, autoDelete: false, arguments: null);
-        channel.QueueBind(dlq, DeadLetterExchange, queue);
-        channel.QueueDeclare(queue, durable: true, exclusive: false, autoDelete: false, arguments: new Dictionary<string, object>
-        {
-            ["x-dead-letter-exchange"] = DeadLetterExchange,
-            ["x-dead-letter-routing-key"] = queue,
-        });
-        foreach (var t in types) channel.QueueBind(queue, _bus.Exchange, t);
         channel.BasicQos(0, 10, false);
 
-        var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.Received += async (_, ea) => await OnMessageAsync(channel, queue, ea, ct);
-        channel.BasicConsume(queue, false, consumer);
-        _log.LogInformation("{Service} consuming {Queue}, bound to: {Types}", _svc.Name, queue, string.Join(", ", types));
+        foreach (var tenant in _sp.GetRequiredService<HimsTenants>().All)
+        {
+            var exchange = _bus.ExchangeFor(tenant.Name);
+            var queue = $"{_svc.Name}.{tenant.Name}.events";
+            var dlq = $"{queue}.dlq";
+            channel.ExchangeDeclare(exchange, ExchangeType.Topic, durable: true);
+            channel.QueueDeclare(dlq, durable: true, exclusive: false, autoDelete: false, arguments: null);
+            channel.QueueBind(dlq, DeadLetterExchange, queue);
+            channel.QueueDeclare(queue, durable: true, exclusive: false, autoDelete: false, arguments: new Dictionary<string, object>
+            {
+                ["x-dead-letter-exchange"] = DeadLetterExchange,
+                ["x-dead-letter-routing-key"] = queue,
+            });
+            foreach (var t in types) channel.QueueBind(queue, exchange, t);
+
+            var consumer = new AsyncEventingBasicConsumer(channel);
+            consumer.Received += async (_, ea) => await OnMessageAsync(channel, queue, tenant, ea, ct);
+            channel.BasicConsume(queue, false, consumer);
+            _log.LogInformation("{Service} consuming {Queue} from {Exchange}, bound to: {Types}", _svc.Name, queue, exchange, string.Join(", ", types));
+        }
 
         while (!ct.IsCancellationRequested && channel.IsOpen) await Task.Delay(1000, ct);
     }
 
-    private async Task OnMessageAsync(IModel channel, string queue, BasicDeliverEventArgs ea, CancellationToken ct)
+    private async Task OnMessageAsync(IModel channel, string queue, HimsTenant queueTenant, BasicDeliverEventArgs ea, CancellationToken ct)
     {
         EventEnvelope? env = null;
         try
         {
             env = JsonSerializer.Deserialize<EventEnvelope>(ea.Body.Span, EventJson.Options);
             if (env is null || string.IsNullOrEmpty(env.Id)) { channel.BasicNack(ea.DeliveryTag, false, false); return; }
-            await ProcessAsync(env, ct);
+            await ProcessAsync(env, queueTenant, ct);
             channel.BasicAck(ea.DeliveryTag, false);
         }
         catch (Exception ex)
@@ -122,9 +127,35 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         }
     }
 
-    private async Task ProcessAsync(EventEnvelope env, CancellationToken ct)
+    /// <summary>
+    /// The event is processed in the database of the tenant whose exchange it came from; its organizationId must agree. An event
+    /// without one (AnalyzerResultReceived: the device sends only a sample barcode) is tried in that tenant's database first,
+    /// then in the others; the first that accepts it keeps it.
+    /// </summary>
+    private async Task ProcessAsync(EventEnvelope env, HimsTenant queueTenant, CancellationToken ct)
+    {
+        var tenants = _sp.GetRequiredService<HimsTenants>();
+        if (env.OrganizationId is int org)
+        {
+            if (org != queueTenant.OrganizationId)
+                throw new InvalidOperationException($"{env.Type} {env.Id} is for organization {org} but came from {_bus.ExchangeFor(queueTenant.Name)} (organization {queueTenant.OrganizationId})");
+            await ProcessInAsync(queueTenant, env, ct);
+            return;
+        }
+
+        var errors = new List<string>();
+        foreach (var tenant in tenants.All.OrderBy(t => t.Name == queueTenant.Name ? 0 : 1))
+        {
+            try { await ProcessInAsync(tenant, env, ct); return; }
+            catch (Exception ex) when (ex is not OperationCanceledException) { errors.Add($"{tenant.Name}: {ex.Message}"); }
+        }
+        throw new InvalidOperationException($"{env.Type} {env.Id} has no organization and no tenant accepted it - {string.Join("; ", errors)}");
+    }
+
+    private async Task ProcessInAsync(HimsTenant tenant, EventEnvelope env, CancellationToken ct)
     {
         using var scope = _sp.CreateScope();
+        scope.ServiceProvider.GetRequiredService<HimsTenantContext>().Use(tenant);
         var db = scope.ServiceProvider.GetRequiredService<TDb>();
         var inbox = scope.ServiceProvider.GetRequiredService<HimsDbNames>().Table("evt", "inbox");   // or <service schema>.evt_inbox
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -136,7 +167,7 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         if (inserted == 0)
         {
             await tx.RollbackAsync(ct);
-            _log.LogInformation("Duplicate {Type} {Id} ignored (already in evt.inbox)", env.Type, env.Id);
+            _log.LogInformation("Duplicate {Type} {Id} ignored (already in the {Tenant} evt.inbox)", env.Type, env.Id, tenant.Name);
             return;
         }
 

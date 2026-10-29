@@ -1,4 +1,10 @@
-"""Inbound device messages: parse -> intg.message_log + evt.outbox('AnalyzerResultReceived') in ONE transaction."""
+"""Inbound device messages: parse -> intg.message_log + evt.outbox('AnalyzerResultReceived') in ONE transaction.
+
+A device message names only the sample barcode, so the tenant comes from how it arrived: the routing key
+lab.results.<tenant>.<analyzer> of the device's channel, the ?tenant= of /api/inbound, or the frontend's subdomain (simulator).
+The message is then logged in that tenant's database and published with its organizationId, on that tenant's exchange only.
+Without a tenant (a channel provisioned before tenants, lab.results.<analyzer>) it is logged in the default tenant's database
+and published without organizationId; Laboratory then files it in whichever tenant has the sample barcode."""
 import logging
 import os
 import uuid
@@ -6,7 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from . import db
-from .config import settings
+from .config import Tenant, settings
 from .parsers import ParseError, ParsedMessage, parse_message
 
 log = logging.getLogger("hub.inbound")
@@ -30,8 +36,16 @@ def store_payload(text: str, suffix: str = "txt") -> str:
     return "file://" + path
 
 
-def process_inbound(raw: str, *, analyzer_hint: Optional[str] = None, source: str = "ENGINE") -> InboundResult:
-    """Handles one message from a device (via the engine). Safe to call twice with the same message: the second call is a no-op."""
+def process_inbound(raw: str, *, analyzer_hint: Optional[str] = None, source: str = "ENGINE", tenant: Optional[Tenant] = None) -> InboundResult:
+    """Handles one message from a device (via the engine) of this tenant (None = not known). Safe to call twice with the same
+    message: the second call is a no-op."""
+    if tenant is not None:
+        with db.using(tenant):
+            return _process(raw, analyzer_hint, source, tenant.organization_id)
+    return _process(raw, analyzer_hint, source, None)
+
+
+def _process(raw: str, analyzer_hint: Optional[str], source: str, organization_id: Optional[int]) -> InboundResult:
     uri = store_payload(raw)
     try:
         parsed = parse_message(raw)
@@ -55,6 +69,8 @@ def process_inbound(raw: str, *, analyzer_hint: Optional[str] = None, source: st
         log_id = db.log_message(conn, interface_code=parsed.format, direction="IN", message_type=parsed.message_type, correlation_id=correlation,
                                 status="PROCESSED", entity_type="lab.sample", payload_uri=uri)
         event_id = uuid.uuid5(uuid.NAMESPACE_URL, f"hims:analyzer-result:{correlation}")     # deterministic: redelivery cannot create a second event
-        db.enqueue_event(conn, "AnalyzerResultReceived", "intg.message_log", log_id, parsed.to_event_payload(log_id, analyzer), event_id=event_id)
-    log.info("Device message %s (%s, %d analytes, sample %s) queued as AnalyzerResultReceived", correlation, parsed.format, len(parsed.analytes), parsed.sample_barcode)
+        db.enqueue_event(conn, "AnalyzerResultReceived", "intg.message_log", log_id, parsed.to_event_payload(log_id, analyzer), event_id=event_id,
+                         organization_id=organization_id)
+    log.info("Device message %s (%s, %d analytes, sample %s) queued as AnalyzerResultReceived for %s", correlation, parsed.format, len(parsed.analytes),
+             parsed.sample_barcode, db.current().subdomain if organization_id is not None else "an unknown tenant")
     return InboundResult(ok=True, message_log_id=log_id, parsed=parsed)

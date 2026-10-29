@@ -1,0 +1,15 @@
+# Shared PostgreSQL server (one database per tenant)
+DB_HOST=192.168.7.164
+DB_PORT=50085
+DB_USER=hims
+DB_PASSWORD=xv7o4aPKUqR6oEf5
+
+# Per-tenant databases
+REDDYS_DB=hims_fhir_reddys
+APOLLO_DB=hims_fhir_apollo
+
+# Public base URL clients use to reach the gateway (no trailing slash)
+PUBLIC_BASE_URL=http://localhost:8080
+
+# Pin a specific HAPI version in production, e.g. v8.4.0
+HAPI_IMAGE=hapiproject/hapi:latest

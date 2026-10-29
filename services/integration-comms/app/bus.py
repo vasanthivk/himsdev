@@ -1,4 +1,4 @@
-"""RabbitMQ plumbing: topology, the outbox relay (evt.outbox -> hims.events) and a resilient consumer thread."""
+"""RabbitMQ plumbing: topology, the outbox relay (each tenant's evt.outbox -> hims.<tenant>.events) and a resilient consumer thread."""
 import json
 import logging
 import threading
@@ -23,7 +23,8 @@ def connect() -> pika.BlockingConnection:
 
 
 def declare_events_topology(ch) -> None:
-    ch.exchange_declare(settings.events_exchange, exchange_type="topic", durable=True)
+    for tenant in db.tenants():
+        ch.exchange_declare(settings.exchange_for(tenant.subdomain), exchange_type="topic", durable=True)
     ch.exchange_declare(settings.dead_letter_exchange, exchange_type="direct", durable=True)
 
 
@@ -46,7 +47,8 @@ def declare_device_topology(ch) -> None:
 # ------------------------------------------------------------------------------------------ outbox relay
 
 class OutboxRelay(threading.Thread):
-    """Publishes evt.outbox rows to the hims.events exchange (routing key = event type), then stamps published_at."""
+    """Publishes evt.outbox rows to the tenant's exchange (hims.reddys.events, ...; routing key = event type), then stamps
+    published_at. Every tenant database has its own outbox; each pass relays a batch from each of them."""
 
     def __init__(self, stop: threading.Event):
         super().__init__(name="outbox-relay", daemon=True)
@@ -63,7 +65,10 @@ class OutboxRelay(threading.Thread):
                     ch.confirm_delivery()
                 else:
                     conn.process_data_events(time_limit=0)   # pump the ioloop so a dead socket is noticed now, not later
-                n = self.relay_batch(ch)
+                n = 0
+                for tenant in db.tenants():
+                    with db.using(tenant):
+                        n += self.relay_batch(ch)
                 if n == 0:
                     time.sleep(0.7)
             except Exception as e:                                        # broker or database hiccup: reconnect
@@ -93,7 +98,7 @@ class OutboxRelay(threading.Thread):
                                          time=r["occurred_at"], source_version=r["outbox_id"], organization_id=r["organization_id"],
                                          branch_id=r["branch_id"], patient_id=r["patient_id"],
                                          correlation_id=str(r["correlation_id"]) if r["correlation_id"] else None, event_version=r["event_version"])
-                    ch.basic_publish(settings.events_exchange, r["event_type"], json.dumps(env).encode(),
+                    ch.basic_publish(settings.exchange_for(db.current().subdomain), r["event_type"], json.dumps(env).encode(),
                                      pika.BasicProperties(content_type="application/json", delivery_mode=2, message_id=str(r["event_id"]),
                                                           type=r["event_type"], app_id=settings.service_name))
             except Exception as e:
@@ -102,7 +107,7 @@ class OutboxRelay(threading.Thread):
                     c2.execute(f"UPDATE {db.table('evt', 'outbox')} SET publish_attempts = publish_attempts + 1, last_error = left(%s, 1000) WHERE outbox_id = ANY(%s)", (str(e), ids))
                 raise
             conn.execute(f"UPDATE {db.table('evt', 'outbox')} SET published_at = now(), last_error = NULL WHERE outbox_id = ANY(%s)", ([r["outbox_id"] for r in rows],))
-            log.info("Published %d event(s) from outbox", len(rows))
+            log.info("Published %d event(s) from the %s outbox to %s", len(rows), db.current().subdomain, settings.exchange_for(db.current().subdomain))
             return len(rows)
 
 
@@ -191,8 +196,9 @@ _publish_channel = None
 _publish_lock = threading.Lock()
 
 
-def publish_device_message(raw: str, analyzer_code: str) -> None:
-    """Puts a raw device message on the integration exchange, exactly as the Open Integration Engine would.
+def publish_device_message(raw: str, analyzer_code: str, tenant: str) -> None:
+    """Puts a raw device message on the integration exchange, exactly as the tenant's engine channel would
+    (routing key lab.results.<tenant>.<analyzer>).
     Reuses one long-lived connection across calls to avoid the connection churn that was triggering resets."""
     global _publish_conn, _publish_channel
     with _publish_lock:
@@ -202,7 +208,7 @@ def publish_device_message(raw: str, analyzer_code: str) -> None:
                     _publish_conn = connect()
                     _publish_channel = _publish_conn.channel()
                     declare_device_topology(_publish_channel)
-                key = f"lab.results.{analyzer_code.lower()}"
+                key = f"lab.results.{tenant}.{analyzer_code.lower()}"
                 _publish_channel.basic_publish(settings.integration_exchange, key, raw.encode("utf-8"),
                                                pika.BasicProperties(delivery_mode=2, content_type="text/plain"))
                 return

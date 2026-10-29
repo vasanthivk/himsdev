@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Hims.Common.Events;
 
 /// <summary>
-/// The message published to the <c>hims.events</c> RabbitMQ topic exchange (CloudEvents-style, as the data model's
+/// The message published to the tenant's RabbitMQ topic exchange (<c>hims.reddys.events</c>, <c>hims.apollo.events</c>) (CloudEvents-style, as the data model's
 /// <c>evt.outbox</c> comment describes). The routing key is <see cref="Type"/>.
 /// </summary>
 public sealed class EventEnvelope

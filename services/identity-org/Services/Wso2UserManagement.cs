@@ -32,16 +32,7 @@ public sealed class Wso2UserManagementOptions
     /// The subdomain of the frontend the request came from: the first label of the browser's Origin (or Referer) host,
     /// e.g. https://apollo.localhost:3000 -> "apollo". Null when there is none (e.g. a request from Postman or curl).
     /// </summary>
-    public static string? RequestSubdomain(HttpRequest request)
-    {
-        foreach (var header in new[] { "Origin", "Referer" })
-        {
-            if (!Uri.TryCreate(request.Headers[header].ToString(), UriKind.Absolute, out var uri)) continue;
-            var labels = uri.Host.Split('.');
-            return labels.Length > 1 ? labels[0].ToLowerInvariant() : null;
-        }
-        return null;
-    }
+    public static string? RequestSubdomain(HttpRequest request) => Hims.Common.Data.HimsTenants.RequestSubdomain(request);
 
     /// <summary>The HIMS organization of the frontend the request came from (by subdomain); null = unknown, so not filtered.</summary>
     public int? OrganizationIdFor(HttpRequest request) => TenantForSubdomain(RequestSubdomain(request))?.OrganizationId;

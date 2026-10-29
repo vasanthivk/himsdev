@@ -9,7 +9,7 @@ def _bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://hims:hims@localhost:5432/himsdev")
+    # Databases: one per tenant, <SUBDOMAIN>_DATABASE_URL (see load_tenants()).
     # Schema of this service in the shared database (himsdev: integration_comms) - tables are <schema>.<old schema>_<table>.
     # Empty = a database of its own with the original schemas (intg.message_log, evt.outbox, ...).
     db_schema: str = os.getenv("DB_SCHEMA", "").strip()
@@ -19,15 +19,18 @@ class Settings:
     # device publish through it, with the user/password of RABBITMQ_URL. Empty = channels cannot be created from the built-in templates.
     rabbitmq_api_url: str = os.getenv("RABBITMQ_API_URL", "").rstrip("/")
 
-    # RabbitMQ topology (shared with the .NET services for hims.events)
-    events_exchange: str = os.getenv("EVENTS_EXCHANGE", "hims.events")
+    # RabbitMQ topology (shared with the .NET services): one topic exchange per tenant, {tenant} = tenant name
+    # (hims.reddys.events, hims.apollo.events), and one queue per tenant for this hub (integration-comms.reddys.events, ...).
+    events_exchange: str = os.getenv("EVENTS_EXCHANGE", "hims.{tenant}.events")
     dead_letter_exchange: str = "hims.events.dlx"
     integration_exchange: str = os.getenv("INTEGRATION_EXCHANGE", "hims.integration")   # the engine publishes device messages here
     results_queue: str = os.getenv("RESULTS_QUEUE", "lab.results")
-    events_queue: str = "integration-comms.events"
+    events_queue: str = "integration-comms.{tenant}.events"
 
     service_name: str = "integration-comms"
-    hapi_fhir_url: str = os.getenv("HAPI_FHIR_URL", "http://103.169.179.22:50060/fhir").rstrip("/")
+    # FHIR server per tenant: <SUBDOMAIN>_FHIR_URL (see load_tenants()). HAPI_FHIR_URL is only a
+    # fallback for an event whose organization has no tenant entry; empty = such an event fails instead of going to a shared server.
+    hapi_fhir_url: str = os.getenv("HAPI_FHIR_URL", "").rstrip("/")
     fhir_sync_enabled: bool = _bool("FHIR_SYNC_ENABLED", True)
 
     # Open Integration Engine (Mirth-compatible REST API). Empty ENGINE_URL = engine provisioning disabled.
@@ -46,5 +49,41 @@ class Settings:
     cors_origins: tuple = tuple(o for o in os.getenv("CORS_ORIGINS", ",".join(["https://localhost:3000"] + ["http://localhost:%d" % p for p in [3000] + list(range(3001, 3014))])).split(",") if o)
     cors_origin_regex: str = os.getenv("CORS_ORIGIN_REGEX", r"https://[a-z0-9-]+\.localhost:3000")   # every tenant subdomain, e.g. https://apollo.localhost:3000
 
+    def exchange_for(self, tenant: str) -> str:
+        """The tenant's events exchange: "apollo" -> hims.apollo.events."""
+        return self.events_exchange.replace("{tenant}", tenant)
+
+    def queue_for(self, tenant: str) -> str:
+        """This hub's queue on the tenant's exchange: "apollo" -> integration-comms.apollo.events."""
+        return self.events_queue.replace("{tenant}", tenant)
+
 
 settings = Settings()
+
+
+@dataclass(frozen=True)
+class Tenant:
+    subdomain: str        # e.g. "reddys" (https://reddys.localhost:3000)
+    organization_id: int  # HIMS core.organization of the tenant
+    database_url: str     # the tenant's own database, e.g. .../hims_reddys
+    fhir_url: str         # e.g. http://localhost:8080/reddys/fhir; empty = HAPI_FHIR_URL
+
+
+def load_tenants() -> list:
+    """Every tenant, from <SUBDOMAIN>_ORGANIZATION_ID with its <SUBDOMAIN>_DATABASE_URL and <SUBDOMAIN>_FHIR_URL, e.g.
+    REDDYS_ORGANIZATION_ID=1, REDDYS_DATABASE_URL=postgresql://.../hims_reddys, REDDYS_FHIR_URL=http://localhost:8080/reddys/fhir.
+    Ordered by organization id; the first is the default (a request or device message that names no organization)."""
+    tenants = []
+    for key, org in os.environ.items():
+        if not key.endswith("_ORGANIZATION_ID") or not org.strip():
+            continue
+        prefix = key[: -len("_ORGANIZATION_ID")]
+        if not org.strip().isdigit():
+            raise RuntimeError(f"{key} is not a number")
+        database_url = os.getenv(f"{prefix}_DATABASE_URL", "").strip()
+        if not database_url:
+            raise RuntimeError(f"{key} is set but {prefix}_DATABASE_URL is missing")
+        tenants.append(Tenant(prefix.lower(), int(org), database_url, os.getenv(f"{prefix}_FHIR_URL", "").strip().rstrip("/")))
+    if not tenants:
+        raise RuntimeError("No tenant configured: set <SUBDOMAIN>_ORGANIZATION_ID and <SUBDOMAIN>_DATABASE_URL (e.g. REDDYS_...)")
+    return sorted(tenants, key=lambda t: t.organization_id)
