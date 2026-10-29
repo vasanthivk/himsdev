@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Hims.Common.Data;
 using Hims.Common.Events;
+using Hims.Common.Logging;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -44,7 +45,8 @@ public static class HimsServiceExtensions
         // Browser front-ends (micro-frontend zones) call each service directly; list their origins in Cors:Origins.
         // Wildcards cover every tenant subdomain, e.g. "https://*.localhost:3000" allows https://apollo.localhost:3000.
         var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? new[] { "http://localhost:3000" };
-        builder.Services.AddCors(o => o.AddPolicy("frontends", p => p.WithOrigins(origins).SetIsOriginAllowedToAllowWildcardSubdomains().AllowAnyHeader().AllowAnyMethod()));
+        builder.Services.AddCors(o => o.AddPolicy("frontends", p => p.WithOrigins(origins).SetIsOriginAllowedToAllowWildcardSubdomains().AllowAnyHeader().AllowAnyMethod()
+            .WithExposedHeaders(FlowLog.HeaderName)));
         builder.AddHimsAuth();
 
         builder.Services.AddHostedService<OutboxRelay>();
@@ -63,7 +65,8 @@ public static class HimsServiceExtensions
         foreach (var eventType in eventTypes)
         {
             var type = eventType;
-            services.AddScoped<IEventHandler>(sp => new RefUpsertHandler<TDb, TRef>(sp.GetRequiredService<TDb>(), type));
+            services.AddScoped<IEventHandler>(sp => new RefUpsertHandler<TDb, TRef>(sp.GetRequiredService<TDb>(), type, null,
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<RefUpsertHandler<TDb, TRef>>>()));
         }
         return services;
     }
@@ -75,7 +78,8 @@ public static class HimsServiceExtensions
         foreach (var eventType in eventTypes)
         {
             var type = eventType;
-            services.AddScoped<IEventHandler>(sp => new RefUpsertHandler<TDb, TRef>(sp.GetRequiredService<TDb>(), type, collectionProperty));
+            services.AddScoped<IEventHandler>(sp => new RefUpsertHandler<TDb, TRef>(sp.GetRequiredService<TDb>(), type, collectionProperty,
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<RefUpsertHandler<TDb, TRef>>>()));
         }
         return services;
     }
@@ -84,6 +88,7 @@ public static class HimsServiceExtensions
     public static WebApplication UseHims<TDb>(this WebApplication app) where TDb : DbContext
     {
         var info = app.Services.GetRequiredService<HimsServiceInfo>();
+        app.UseHimsCorrelation();   // X-Correlation-Id for every request; flows into evt.outbox and the RabbitMQ envelope
         app.UseHimsSwagger(info.Title);
         app.UseCors("frontends");
         app.UseHimsAuth();

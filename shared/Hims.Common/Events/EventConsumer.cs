@@ -1,4 +1,5 @@
 using Hims.Common.Data;
+using Hims.Common.Logging;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,7 +94,14 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         try
         {
             env = JsonSerializer.Deserialize<EventEnvelope>(ea.Body.Span, EventJson.Options);
-            if (env is null || string.IsNullOrEmpty(env.Id)) { channel.BasicNack(ea.DeliveryTag, false, false); return; }
+            if (env is null || string.IsNullOrEmpty(env.Id))
+            {
+                _log.LogWarning("[FLOW] corr=none event=none step=SUB-REJECT {Service}: unreadable message on {Queue} (routing key '{Key}') sent to the DLQ", _svc.Name, queue, ea.RoutingKey);
+                channel.BasicNack(ea.DeliveryTag, false, false);
+                return;
+            }
+            _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=SUB-01 {Service}: received {Type} for {Subject} from {Source} on queue {Queue} (attempt {Attempt})",
+                FlowLog.Corr(env.CorrelationId), env.Id, _svc.Name, env.Type, env.Subject, env.Source, queue, ReadRetry(ea.BasicProperties) + 1);
             await ProcessAsync(env, ct);
             channel.BasicAck(ea.DeliveryTag, false);
         }
@@ -101,6 +109,9 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         {
             var retry = ReadRetry(ea.BasicProperties);
             _log.LogWarning(ex, "Failed handling {Type} {Id} (attempt {Attempt}/{Max})", env?.Type, env?.Id, retry + 1, MaxRetries);
+            _log.LogWarning("[FLOW] corr={Corr} event={EventId} step={Step} {Service}: {Type} failed (attempt {Attempt}/{Max}): {Error}",
+                FlowLog.Corr(env?.CorrelationId), env?.Id ?? "none", env is not null && retry < MaxRetries ? "SUB-RETRY" : "SUB-DLQ",
+                _svc.Name, env?.Type, retry + 1, MaxRetries, ex.Message);
             if (env is not null && retry < MaxRetries)
             {
                 try { await Task.Delay(TimeSpan.FromSeconds(2 * (retry + 1)), ct); } catch (OperationCanceledException) { }
@@ -128,6 +139,8 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         var db = scope.ServiceProvider.GetRequiredService<TDb>();
         var inbox = scope.ServiceProvider.GetRequiredService<HimsDbNames>().Table("evt", "inbox");   // or <service schema>.evt_inbox
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var corr = FlowLog.Corr(env.CorrelationId);
+        var started = System.Diagnostics.Stopwatch.StartNew();
 
         // The table name is configuration (validated identifier); the values stay parameters ({0}..{2}).
         var inserted = await db.Database.ExecuteSqlRawAsync(
@@ -136,16 +149,24 @@ public sealed class EventConsumer<TDb> : BackgroundService where TDb : DbContext
         if (inserted == 0)
         {
             await tx.RollbackAsync(ct);
-            _log.LogInformation("Duplicate {Type} {Id} ignored (already in evt.inbox)", env.Type, env.Id);
+            _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=SUB-DUP {Service}: {Type} already in {Inbox}, ignored (redelivery)", corr, env.Id, _svc.Name, env.Type, inbox);
             return;
         }
+        _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=SUB-02 {Service}: recorded in {Inbox} (idempotency check passed)", corr, env.Id, _svc.Name, inbox);
 
         foreach (var handler in scope.ServiceProvider.GetServices<IEventHandler>().Where(h => h.EventType == env.Type))
+        {
+            var handlerName = handler.GetType().IsGenericType
+                ? $"{handler.GetType().Name.Split('`')[0]}<{handler.GetType().GetGenericArguments().Last().Name}>"
+                : handler.GetType().Name;
+            _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=SUB-03 {Service}: running handler {Handler} for {Type}", corr, env.Id, _svc.Name, handlerName, env.Type);
             await handler.HandleAsync(env, ct);
+        }
 
         await db.Database.ExecuteSqlRawAsync(
             $"UPDATE {inbox} SET process_status = 'PROCESSED', processed_at = now() WHERE message_id = {{0}}", new object[] { env.Id }, ct);
         await tx.CommitAsync(ct);
+        _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=SUB-04 {Service}: {Type} PROCESSED and committed in {Ms} ms", corr, env.Id, _svc.Name, env.Type, started.ElapsedMilliseconds);
     }
 
     private static int ReadRetry(IBasicProperties props)

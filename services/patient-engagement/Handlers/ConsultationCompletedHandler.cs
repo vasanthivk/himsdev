@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Hims.Common.Events;
+using Hims.Common.Logging;
 using Hims.PatientEngagement.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,14 +24,25 @@ public class ConsultationCompletedHandler : IEventHandler
         var p = envelope.Data.Deserialize<ConsultationCompletedPayload>(EventJson.Options)
             ?? throw new InvalidOperationException("ConsultationCompleted payload is empty");
         var enc = await _db.Encounters.FirstOrDefaultAsync(e => e.EncounterId == p.EncounterId, ct);
-        if (enc is null) { _log.LogWarning("ConsultationCompleted for unknown encounter {EncounterId}", p.EncounterId); return; }
-        if (enc.EncounterStatus == "COMPLETED") return;
+        var corr = FlowLog.Corr(envelope.CorrelationId);
+        if (enc is null)
+        {
+            _log.LogWarning("[FLOW] corr={Corr} event={EventId} step=CC-STOP ConsultationCompleted for unknown encounter {EncounterId}", corr, envelope.Id, p.EncounterId);
+            return;
+        }
+        if (enc.EncounterStatus == "COMPLETED")
+        {
+            _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=CC-STOP encounter {EncounterNo} already COMPLETED, nothing to do", corr, envelope.Id, enc.EncounterNo);
+            return;
+        }
 
         enc.EncounterStatus = "COMPLETED";
         enc.EndAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
-        _db.EnqueueEvent("EncounterClosed", "pat.encounter", enc.EncounterId, enc, enc.OrganizationId, enc.BranchId, enc.PatientId);
+        // Same correlation id as the incoming event, so the chain doctor -> clinical-care -> here -> subscribers stays traceable.
+        var outbox = _db.EnqueueEvent("EncounterClosed", "pat.encounter", enc.EncounterId, enc, enc.OrganizationId, enc.BranchId, enc.PatientId, envelope.CorrelationId);
         await _db.SaveChangesAsync(ct);
-        _log.LogInformation("Encounter {EncounterId} closed after the consultation was completed", enc.EncounterId);
+        _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=CC-01 encounter {EncounterNo} closed after ConsultationCompleted; EncounterClosed queued in evt.outbox (outbox_id {OutboxId}, new event {NewEventId})",
+            corr, envelope.Id, enc.EncounterNo, outbox.OutboxId, outbox.EventId);
     }
 }

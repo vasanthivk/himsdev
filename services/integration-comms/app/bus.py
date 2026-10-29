@@ -157,6 +157,13 @@ class Consumer(threading.Thread):
             retry = int((props.headers or {}).get("x-retry", 0))
             log.warning("%s failed on message (attempt %d/%d): %s", self.name, retry + 1, self.MAX_RETRIES, e)
             try:
+                env = json.loads(body)
+                ids = f"corr={env.get('correlationId') or 'none'} event={env.get('id') or 'none'}" if isinstance(env, dict) else "corr=none event=none"
+            except Exception:
+                ids = "corr=none event=none"
+            log.warning("[FLOW] %s step=%s %s: %s failed (attempt %d/%d): %s", ids, "SUB-RETRY" if retry < self.MAX_RETRIES else "SUB-DLQ",
+                        self.name, method.routing_key, retry + 1, self.MAX_RETRIES, e)
+            try:
                 if retry < self.MAX_RETRIES:
                     time.sleep(min(2 * (retry + 1), 8))
                     ch.basic_publish("", self.queue, body, pika.BasicProperties(content_type=props.content_type, delivery_mode=2,

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Hims.Common.Data;
+using Hims.Common.Logging;
 using Hims.PatientEngagement.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +47,8 @@ public class PatientsController : ControllerBase
 {
     private readonly PatientEngagementDbContext _db;
     private readonly ISequenceService _seq;
-    public PatientsController(PatientEngagementDbContext db, ISequenceService seq) { _db = db; _seq = seq; }
+    private readonly ILogger<PatientsController> _log;
+    public PatientsController(PatientEngagementDbContext db, ISequenceService seq, ILogger<PatientsController> log) { _db = db; _seq = seq; _log = log; }
 
     /// <summary>
     /// Registers a patient: allocates the UHID from core.number_sequence, inserts pat.patient and writes a
@@ -56,17 +58,33 @@ public class PatientsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Register([FromBody] RegisterPatientRequest req, [FromQuery] bool force, CancellationToken ct)
     {
+        var corr = HttpContext.GetCorrelationId();
+        _log.LogInformation("[FLOW] corr={Corr} step=REG-01 POST /api/patients received: branch {BranchId}, mobile {Mobile}, source {Source}, user {User}, force={Force}",
+            corr, req.BranchId, FlowLog.MaskMobile(req.Mobile), req.RegistrationSource, User.Identity?.Name ?? "anonymous", force);
+
         var branch = await _db.RefBranches.FirstOrDefaultAsync(b => b.BranchId == req.BranchId, ct);
         if (branch is null || branch.OrganizationId is null)
+        {
+            _log.LogWarning("[FLOW] corr={Corr} step=REG-STOP branch {BranchId} not found in ref.branch -> 400 (reference data not replicated from identity-org yet)", corr, req.BranchId);
             return BadRequest(new { error = $"Branch {req.BranchId} is unknown. Load reference data first (POST identity-org /api/admin/republish)." });
+        }
         var orgId = branch.OrganizationId.Value;
+        _log.LogInformation("[FLOW] corr={Corr} step=REG-02 branch {BranchId} resolved from ref.branch -> organization {OrgId}", corr, req.BranchId, orgId);
 
         if (!force)
         {
             var first = req.FirstName.Trim().ToLower();
             var dup = await _db.Patients.FirstOrDefaultAsync(p => p.Mobile == req.Mobile && p.FirstName.ToLower() == first && p.DateOfBirth == req.DateOfBirth, ct);
             if (dup is not null)
+            {
+                _log.LogWarning("[FLOW] corr={Corr} step=REG-STOP duplicate of patient {PatientId} ({Uhid}) -> 409, nothing saved", corr, dup.PatientId, dup.Uhid);
                 return Conflict(new { error = "A patient with the same name, mobile and date of birth already exists.", patientId = dup.PatientId, uhid = dup.Uhid });
+            }
+            _log.LogInformation("[FLOW] corr={Corr} step=REG-03 duplicate check passed (mobile + first name + date of birth)", corr);
+        }
+        else
+        {
+            _log.LogInformation("[FLOW] corr={Corr} step=REG-03 duplicate check skipped (force=true)", corr);
         }
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
@@ -83,10 +101,13 @@ public class PatientsController : ControllerBase
         };
         _db.Patients.Add(patient);
         await _db.SaveChangesAsync(ct);          // identity value for patient_id is needed inside the event
+        _log.LogInformation("[FLOW] corr={Corr} step=REG-04 UHID {Uhid} allocated from core.number_sequence; pat.patient inserted, patient_id {PatientId}", corr, patient.Uhid, patient.PatientId);
 
-        _db.EnqueueEvent("PatientRegistered", "pat.patient", patient.PatientId, patient, orgId, req.BranchId, patient.PatientId);
+        var outbox = _db.EnqueueEvent("PatientRegistered", "pat.patient", patient.PatientId, patient, orgId, req.BranchId, patient.PatientId, corr);
         await _db.SaveChangesAsync(ct);
+        _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=REG-05 PatientRegistered queued in evt.outbox (outbox_id {OutboxId})", corr, outbox.EventId, outbox.OutboxId);
         await tx.CommitAsync(ct);
+        _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=REG-06 committed patient + outbox row; 201 returned to the screen. OutboxRelay publishes next", corr, outbox.EventId);
 
         return CreatedAtAction(nameof(Get), new { id = patient.PatientId }, patient);
     }
@@ -95,8 +116,14 @@ public class PatientsController : ControllerBase
     [HttpPut("{id:long}")]
     public async Task<IActionResult> Update(long id, [FromBody] UpdatePatientRequest req, CancellationToken ct)
     {
+        var corr = HttpContext.GetCorrelationId();
+        _log.LogInformation("[FLOW] corr={Corr} step=UPD-01 PUT /api/patients/{PatientId} received", corr, id);
         var p = await _db.Patients.FirstOrDefaultAsync(x => x.PatientId == id, ct);
-        if (p is null) return NotFound();
+        if (p is null)
+        {
+            _log.LogWarning("[FLOW] corr={Corr} step=UPD-STOP patient {PatientId} not found -> 404", corr, id);
+            return NotFound();
+        }
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         if (req.Mobile is not null) p.Mobile = req.Mobile;
         if (req.AltMobile is not null) p.AltMobile = req.AltMobile;
@@ -106,9 +133,11 @@ public class PatientsController : ControllerBase
         if (req.StateCode is not null) p.StateCode = req.StateCode;
         if (req.Pincode is not null) p.Pincode = req.Pincode;
         await _db.SaveChangesAsync(ct);
-        _db.EnqueueEvent("PatientUpdated", "pat.patient", p.PatientId, p, p.OrganizationId, p.RegistrationBranchId, p.PatientId);
+        var outbox = _db.EnqueueEvent("PatientUpdated", "pat.patient", p.PatientId, p, p.OrganizationId, p.RegistrationBranchId, p.PatientId, corr);
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=UPD-02 patient {PatientId} ({Uhid}) updated; PatientUpdated queued in evt.outbox (outbox_id {OutboxId}) and committed",
+            corr, outbox.EventId, p.PatientId, p.Uhid, outbox.OutboxId);
         return Ok(p);
     }
 

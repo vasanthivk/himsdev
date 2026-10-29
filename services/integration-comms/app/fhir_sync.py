@@ -17,6 +17,11 @@ from .fhir_client import FhirClient
 
 log = logging.getLogger("hub.fhirsync")
 
+
+def flow_ids(env: dict) -> str:
+    """'corr=<correlationId> event=<event id>' - same keys as the .NET services, so one grep follows a request everywhere."""
+    return f"corr={env.get('correlationId') or 'none'} event={env.get('id') or 'none'}"
+
 # README subscribes the hub to PatientRegistered, PatientUpdated, EncounterClosed, LabReportReleased, PrescriptionIssued.
 # EncounterStarted and OrderPlaced are added here so encounters and lab orders exist in FHIR before their results (extension).
 SUBSCRIBED = ["PatientRegistered", "PatientUpdated", "EncounterStarted", "EncounterClosed", "OrderPlaced", "PrescriptionIssued", "LabReportReleased"]
@@ -37,7 +42,7 @@ def camel(column: str) -> str:
     return head + "".join(t.capitalize() for t in tail)
 
 
-def upsert_ref(conn, spec: tuple, data: dict, version: Optional[int]) -> None:
+def upsert_ref(conn, spec: tuple, data: dict, version: Optional[int]) -> int:
     """ref.* read-model upsert; an older event never overwrites a newer row (source_version check)."""
     table, key, cols = spec
     names = [key] + cols + ["source_version"]
@@ -45,10 +50,10 @@ def upsert_ref(conn, spec: tuple, data: dict, version: Optional[int]) -> None:
     if values[0] is None:
         raise ValueError(f"payload has no {camel(key)} for {table}")
     sets = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols + ["source_version"])
-    conn.execute(
+    return conn.execute(
         f"INSERT INTO {table} ({', '.join(names)}) VALUES ({', '.join(['%s'] * len(names))}) "
         f"ON CONFLICT ({key}) DO UPDATE SET {sets}, replicated_at = now() "
-        f"WHERE {table}.source_version IS NULL OR {table}.source_version < EXCLUDED.source_version", values)
+        f"WHERE {table}.source_version IS NULL OR {table}.source_version < EXCLUDED.source_version", values).rowcount
 
 
 class Ctx:
@@ -56,6 +61,16 @@ class Ctx:
 
     def __init__(self, conn, fhir: Optional[FhirClient], env: dict):
         self.conn, self.fhir, self.env = conn, fhir, env
+
+    def ref(self, spec: tuple, d: dict) -> None:
+        table, key, _ = spec
+        changed = upsert_ref(self.conn, spec, d, self.env.get("sourceVersion"))
+        if changed:
+            log.info("[FLOW] %s step=REF-UPSERT %s: %s %s=%s upserted (source_version %s)",
+                     flow_ids(self.env), self.env.get("type"), table, key, d.get(camel(key)), self.env.get("sourceVersion"))
+        else:
+            log.info("[FLOW] %s step=REF-SKIP %s: %s %s=%s NOT changed - stored source_version is newer (stale event)",
+                     flow_ids(self.env), self.env.get("type"), table, key, d.get(camel(key)))
 
     def lookup(self, entity_type: str, entity_id, rtype: str) -> Optional[str]:
         if entity_id is None:
@@ -74,11 +89,14 @@ class Ctx:
 
     def push(self, entity_type: str, entity_id, rtype: str, resource: dict) -> Optional[str]:
         if self.fhir is None:
+            log.info("[FLOW] %s step=FHIR-OFF %s %s=%s not pushed (FHIR sync disabled)", flow_ids(self.env), rtype, entity_type, entity_id)
             return None
         corr = self.env.get("id")
+        log.info("[FLOW] %s step=FHIR-01 PUT %s for %s=%s to the FHIR server", flow_ids(self.env), rtype, entity_type, entity_id)
         try:
             res = self.fhir.conditional_put(rtype, fm.system_for(entity_type), str(entity_id), resource)
         except Exception as e:
+            log.warning("[FLOW] %s step=FHIR-FAIL %s for %s=%s failed: %s", flow_ids(self.env), rtype, entity_type, entity_id, e)
             with db.pool().connection() as other:            # separate connection: this transaction is about to roll back
                 db.log_message(other, interface_code="FHIR", direction="OUT", message_type=rtype, correlation_id=corr, entity_type=entity_type,
                                entity_id=int(entity_id), status="FAILED", error=str(e))
@@ -89,6 +107,8 @@ class Ctx:
                ON CONFLICT (entity_type, entity_id, fhir_resource_type)
                DO UPDATE SET fhir_resource_id = EXCLUDED.fhir_resource_id, fhir_version_id = EXCLUDED.fhir_version_id, last_synced_at = now(), sync_status = 'SYNCED'""",
             (entity_type, entity_id, rtype, res["id"], res.get("versionId")))
+        log.info("[FLOW] %s step=FHIR-02 FHIR %s/%s (version %s) saved; intg.fhir_resource_map updated for %s=%s",
+                 flow_ids(self.env), rtype, res["id"], res.get("versionId"), entity_type, entity_id)
         db.log_message(self.conn, interface_code="FHIR", direction="OUT", message_type=rtype, correlation_id=corr, entity_type=entity_type,
                        entity_id=int(entity_id), status="PROCESSED")
         return res["id"]
@@ -97,12 +117,12 @@ class Ctx:
 # ------------------------------------------------------------------------------------------------ handlers
 
 def on_patient(ctx: Ctx, d: dict) -> None:
-    upsert_ref(ctx.conn, REF_PATIENT, d, ctx.env.get("sourceVersion"))
+    ctx.ref(REF_PATIENT, d)
     ctx.push("pat.patient", d["patientId"], "Patient", fm.patient_resource(d))
 
 
 def on_encounter(ctx: Ctx, d: dict) -> None:
-    upsert_ref(ctx.conn, REF_ENCOUNTER, d, ctx.env.get("sourceVersion"))
+    ctx.ref(REF_ENCOUNTER, d)
     pid = ctx.require("pat.patient", d["patientId"], "Patient")
     ctx.push("pat.encounter", d["encounterId"], "Encounter", fm.encounter_resource(d, pid))
 
@@ -158,7 +178,10 @@ def handle_event(body: bytes, routing_key: str, fhir: Optional[FhirClient] = Non
     env = json.loads(body)
     etype = env.get("type") or routing_key
     fn: Optional[Callable] = HANDLERS.get(etype)
+    log.info("[FLOW] %s step=SUB-01 integration-comms: received %s for %s from %s",
+             flow_ids(env), etype, env.get("subject"), env.get("source"))
     if fn is None:
+        log.info("[FLOW] %s step=SUB-SKIP no handler for %s", flow_ids(env), etype)
         return
     client = fhir if fhir is not None else default_client()
     with db.tx() as conn:
@@ -166,8 +189,9 @@ def handle_event(body: bytes, routing_key: str, fhir: Optional[FhirClient] = Non
             f"INSERT INTO {db.table('evt', 'inbox')} (message_id, event_type, source_service) VALUES (%s, %s, %s) ON CONFLICT (message_id) DO NOTHING RETURNING message_id",
             (env["id"], etype, env.get("source", "unknown"))).fetchone()
         if not first_time:
-            log.info("Duplicate %s %s ignored (already in evt.inbox)", etype, env["id"])
+            log.info("[FLOW] %s step=SUB-DUP integration-comms: %s already in evt.inbox, ignored (redelivery)", flow_ids(env), etype)
             return
+        log.info("[FLOW] %s step=SUB-02 integration-comms: recorded in evt.inbox; running %s", flow_ids(env), fn.__name__)
         fn(Ctx(conn, client, env), env["data"])
         conn.execute(f"UPDATE {db.table('evt', 'inbox')} SET process_status = 'PROCESSED', processed_at = now() WHERE message_id = %s", (env["id"],))
-    log.info("Handled %s %s", etype, env["id"])
+    log.info("[FLOW] %s step=SUB-04 integration-comms: %s PROCESSED and committed", flow_ids(env), etype)

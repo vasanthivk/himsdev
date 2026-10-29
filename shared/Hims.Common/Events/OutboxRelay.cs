@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Hims.Common.Data;
+using Hims.Common.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -75,7 +76,7 @@ public sealed class OutboxRelay : BackgroundService
         await using var tx = await conn.BeginTransactionAsync(ct);
 
         var ids = new List<long>();
-        var messages = new List<(long OutboxId, Guid EventId, string Type, byte[] Body)>();
+        var messages = new List<(long OutboxId, Guid EventId, string Type, byte[] Body, Guid? CorrelationId, string Subject)>();
 
         var select = $@"SELECT outbox_id, event_id, event_type, event_version, aggregate_type, aggregate_id, session_key,
                                        organization_id, branch_id, patient_id, correlation_id, payload_json::text, occurred_at
@@ -111,7 +112,9 @@ public sealed class OutboxRelay : BackgroundService
                     SourceVersion = outboxId,
                 };
                 ids.Add(outboxId);
-                messages.Add((outboxId, eventId, type, Encoding.UTF8.GetBytes(EventJson.Serialize(envelope))));
+                messages.Add((outboxId, eventId, type, Encoding.UTF8.GetBytes(EventJson.Serialize(envelope)), envelope.CorrelationId, envelope.Subject!));
+                _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=PUB-01 {Service}: picked {Type} for {Subject} from {Outbox} (outbox_id {OutboxId}, published_at IS NULL)",
+                    FlowLog.Corr(envelope.CorrelationId), eventId, _svc.Name, type, envelope.Subject, _outbox, outboxId);
             }
         }
 
@@ -127,12 +130,18 @@ public sealed class OutboxRelay : BackgroundService
                 props.MessageId = m.EventId.ToString();
                 props.Type = m.Type;
                 props.AppId = _svc.Name;
+                if (m.CorrelationId is not null) props.CorrelationId = m.CorrelationId.ToString();
                 channel.BasicPublish(_bus.Exchange, m.Type, props, m.Body);
+                _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=PUB-02 {Service}: sent to RabbitMQ exchange '{Exchange}', routing key '{Type}' ({Bytes} bytes)",
+                    FlowLog.Corr(m.CorrelationId), m.EventId, _svc.Name, _bus.Exchange, m.Type, m.Body.Length);
             }
             channel.WaitForConfirmsOrDie(TimeSpan.FromSeconds(10));
         }
         catch (Exception ex)
         {
+            foreach (var m in messages)
+                _log.LogWarning("[FLOW] corr={Corr} event={EventId} step=PUB-FAIL {Service}: {Type} (outbox_id {OutboxId}) NOT published, will retry: {Error}",
+                    FlowLog.Corr(m.CorrelationId), m.EventId, _svc.Name, m.Type, m.OutboxId, ex.Message);
             await tx.RollbackAsync(ct);
             await RecordFailureAsync(ds, ids, ex.Message, ct);
             throw;
@@ -144,6 +153,9 @@ public sealed class OutboxRelay : BackgroundService
             await upd.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
+        foreach (var m in messages)
+            _log.LogInformation("[FLOW] corr={Corr} event={EventId} step=PUB-03 {Service}: RabbitMQ confirmed {Type}; outbox_id {OutboxId} stamped published_at",
+                FlowLog.Corr(m.CorrelationId), m.EventId, _svc.Name, m.Type, m.OutboxId);
         _log.LogInformation("Published {Count} event(s) from outbox", messages.Count);
         return messages.Count;
     }

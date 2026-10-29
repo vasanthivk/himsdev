@@ -1,7 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text.Json;
+using Hims.Common.Logging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Hims.Common.Events;
 
@@ -20,14 +22,17 @@ public sealed class RefUpsertHandler<TDb, TRef> : IEventHandler where TDb : DbCo
 
     private readonly TDb _db;
     private readonly string? _collectionProperty;
+    private readonly ILogger? _log;
 
     /// <param name="collectionProperty">When set, the payload property of that name is an array and EACH element is
     /// upserted (used for e.g. OrderPlaced.items -> ref.order_item). When null the payload itself is the row.</param>
-    public RefUpsertHandler(TDb db, string eventType, string? collectionProperty = null)
+    /// <param name="log">Optional: writes a [FLOW] line for every ref row inserted, updated or skipped as stale.</param>
+    public RefUpsertHandler(TDb db, string eventType, string? collectionProperty = null, ILogger? log = null)
     {
         _db = db;
         EventType = eventType;
         _collectionProperty = collectionProperty;
+        _log = log;
     }
 
     public string EventType { get; }
@@ -36,16 +41,17 @@ public sealed class RefUpsertHandler<TDb, TRef> : IEventHandler where TDb : DbCo
     {
         if (_collectionProperty is null)
         {
-            await UpsertAsync(envelope.Data, envelope.SourceVersion, ct);
+            await UpsertAsync(envelope, envelope.Data, ct);
             return;
         }
         if (envelope.Data.ValueKind != JsonValueKind.Object ||
             !envelope.Data.TryGetProperty(_collectionProperty, out var items) || items.ValueKind != JsonValueKind.Array) return;
-        foreach (var item in items.EnumerateArray()) await UpsertAsync(item, envelope.SourceVersion, ct);
+        foreach (var item in items.EnumerateArray()) await UpsertAsync(envelope, item, ct);
     }
 
-    private async Task UpsertAsync(JsonElement data, long sourceVersion, CancellationToken ct)
+    private async Task UpsertAsync(EventEnvelope envelope, JsonElement data, CancellationToken ct)
     {
+        var sourceVersion = envelope.SourceVersion;
         if (data.ValueKind != JsonValueKind.Object) return;
 
         if (!data.TryGetProperty(EventJson.CamelCase(KeyProp.Name), out var keyElement))
@@ -58,7 +64,12 @@ public sealed class RefUpsertHandler<TDb, TRef> : IEventHandler where TDb : DbCo
         if (!isNew && SourceVersionProp is not null && sourceVersion > 0)
         {
             var current = (long?)SourceVersionProp.GetValue(entity);
-            if (current.HasValue && current.Value >= sourceVersion) return; // stale event
+            if (current.HasValue && current.Value >= sourceVersion)   // stale event
+            {
+                _log?.LogInformation("[FLOW] corr={Corr} event={EventId} step=REF-SKIP {Type}: {Table} key {Key} NOT changed - stored source_version {Current} >= event source_version {SourceVersion} (stale event)",
+                    FlowLog.Corr(envelope.CorrelationId), envelope.Id, EventType, typeof(TRef).Name, key, current.Value, sourceVersion);
+                return;
+            }
         }
 
         entity ??= new TRef();
@@ -83,5 +94,7 @@ public sealed class RefUpsertHandler<TDb, TRef> : IEventHandler where TDb : DbCo
 
         if (isNew) _db.Set<TRef>().Add(entity);
         await _db.SaveChangesAsync(ct);
+        _log?.LogInformation("[FLOW] corr={Corr} event={EventId} step=REF-UPSERT {Type}: {Action} {Table} key {Key} (source_version {SourceVersion})",
+            FlowLog.Corr(envelope.CorrelationId), envelope.Id, EventType, isNew ? "INSERTED" : "UPDATED", typeof(TRef).Name, key, sourceVersion);
     }
 }
