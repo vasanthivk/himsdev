@@ -3,8 +3,8 @@
 # backup_all.sh — Dump every hims_* PostgreSQL database to a timestamped folder.
 #
 # Usage:
-#   ./backup_all.sh                    # backup all hims_* databases
-#   PGPASSWORD=xxx ./backup_all.sh      # pass password via env instead of prompt
+#   ./backup_all.sh                    # backup all hims_* databases (password: PGPASSWORD in .env next to this script)
+#   PGPASSWORD=xxx ./backup_all.sh      # pass password via env instead (overrides .env)
 #
 # Config can be overridden via environment variables, e.g.:
 #   PGHOST=103.169.179.22 PGPORT=50085 PGUSER=hims BACKUP_DIR=/mnt/backups ./backup_all.sh
@@ -15,9 +15,23 @@ set -euo pipefail
 PGHOST="${PGHOST:-103.169.179.22}"
 PGPORT="${PGPORT:-50085}"
 PGUSER="${PGUSER:-hims}"
-BACKUP_ROOT="${BACKUP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dumps}"
-RETENTION_DAYS="${RETENTION_DAYS:-14}"   # set to 0 to disable pruning
-DB_PATTERN="${DB_PATTERN:-hims_%}"       # SQL LIKE pattern for db discovery
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_ROOT="${BACKUP_DIR:-${SCRIPT_DIR}/dumps}"
+RETENTION_DAYS="${RETENTION_DAYS:-0}"    # 0 = keep every backup; e.g. RETENTION_DAYS=14 deletes backup folders older than 14 days
+DB_PATTERN="${DB_PATTERN:-hims\_%}"      # SQL LIKE pattern for db discovery: names starting with "hims_" (\_ = a literal underscore)
+
+# Password: PGPASSWORD from the environment, else from .env next to this script (git-ignored), e.g.
+#   PGPASSWORD=your_password
+# The file is parsed, not sourced: only the PGPASSWORD line is read; quotes and Windows line endings are stripped.
+ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env}"
+if [ -z "${PGPASSWORD:-}" ] && [ -f "${ENV_FILE}" ]; then
+    PGPASSWORD="$(sed -n 's/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}PGPASSWORD[[:space:]]*=[[:space:]]*//p' "${ENV_FILE}" \
+        | tail -n 1 | tr -d '\r' | sed 's/[[:space:]]*$//; s/^"\(.*\)"$/\1/; s/^'"'"'\(.*\)'"'"'$/\1/')"
+fi
+if [ -z "${PGPASSWORD:-}" ]; then
+    echo "FATAL: PGPASSWORD is not set - add PGPASSWORD=... to ${ENV_FILE} or set it in the environment" >&2
+    exit 1
+fi
 
 # Override these if your PATH points at the wrong major version, e.g. on
 # Windows with multiple PostgreSQL installs:
@@ -26,7 +40,7 @@ DB_PATTERN="${DB_PATTERN:-hims_%}"       # SQL LIKE pattern for db discovery
 PG_DUMP_BIN="${PG_DUMP_BIN:-pg_dump}"
 PG_DUMPALL_BIN="${PG_DUMPALL_BIN:-pg_dumpall}"
 
-export PGHOST PGPORT PGUSER
+export PGHOST PGPORT PGUSER PGPASSWORD
 
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DEST_DIR="${BACKUP_ROOT}/${TIMESTAMP}"

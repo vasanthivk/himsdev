@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Nav from '@/components/Nav';
 import ProfileMenu from '@/components/ProfileMenu';
 import { Alert } from '@/components/ui';
-import { CALLBACK_PATH, getAccessToken, getAuthConfig, getUser, login, LOGIN_PATH, User } from '@/lib/auth';
+import { CALLBACK_PATH, getAccessToken, getAuthConfig, getUser, login, LOGIN_PATH, noTenantMessage, tenantSubdomain, User } from '@/lib/auth';
 
 type Gate = { phase: 'checking' } | { phase: 'ready'; user: User | null } | { phase: 'error'; message: string };
 
@@ -15,6 +15,8 @@ export default function AuthGate({ active, children }: { active: string; childre
 
   useEffect(() => {
     (async () => {
+      // The tenant comes from the subdomain; on a bare host (localhost:3000) every service would refuse the calls, so stop here.
+      if (!tenantSubdomain()) return setGate({ phase: 'error', message: noTenantMessage() });
       const cfg = await getAuthConfig();
       const path = window.location.pathname;
       if (cfg.status === 'disabled' || path.startsWith(CALLBACK_PATH) || path.startsWith(LOGIN_PATH)) return setGate({ phase: 'ready', user: null });

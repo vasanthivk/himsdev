@@ -1,0 +1,56 @@
+--
+-- PostgreSQL database cluster dump
+--
+
+\restrict y2nh48XAELS2LiiMCDUwqfX8Kgv5uRPfQcg8N9tU4VKbAGT4ovb3TmTSClGR6qi
+
+SET default_transaction_read_only = off;
+
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+
+--
+-- Roles
+--
+
+CREATE ROLE hims;
+ALTER ROLE hims WITH NOSUPERUSER INHERIT NOCREATEROLE CREATEDB LOGIN NOREPLICATION NOBYPASSRLS;
+CREATE ROLE hireai;
+ALTER ROLE hireai WITH NOSUPERUSER INHERIT CREATEROLE CREATEDB LOGIN NOREPLICATION NOBYPASSRLS;
+CREATE ROLE oneintellecthr;
+ALTER ROLE oneintellecthr WITH SUPERUSER INHERIT CREATEROLE CREATEDB LOGIN REPLICATION NOBYPASSRLS;
+CREATE ROLE postgres;
+ALTER ROLE postgres WITH SUPERUSER INHERIT CREATEROLE CREATEDB LOGIN REPLICATION BYPASSRLS;
+CREATE ROLE "user";
+ALTER ROLE "user" WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB LOGIN NOREPLICATION NOBYPASSRLS;
+CREATE ROLE venkat;
+ALTER ROLE venkat WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB LOGIN NOREPLICATION NOBYPASSRLS;
+
+--
+-- User Configurations
+--
+
+--
+-- User Config "oneintellecthr"
+--
+
+ALTER ROLE oneintellecthr SET "TimeZone" TO 'UTC';
+
+
+--
+-- Role memberships
+--
+
+GRANT pg_read_all_data TO hireai WITH INHERIT TRUE GRANTED BY postgres;
+
+
+
+
+
+
+\unrestrict y2nh48XAELS2LiiMCDUwqfX8Kgv5uRPfQcg8N9tU4VKbAGT4ovb3TmTSClGR6qi
+
+--
+-- PostgreSQL database cluster dump complete
+--
+

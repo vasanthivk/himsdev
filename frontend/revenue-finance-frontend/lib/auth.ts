@@ -7,6 +7,20 @@
 // username and password; Identity & Org issues a HIMS access token that every service validates.
 export const HIMS_LOGIN = process.env.WSO2_AUTHENTICATION === 'false';
 
+/** The tenant subdomain of this page (reddys.localhost -> "reddys"), or null on a bare host such as localhost or an IP address. */
+export function tenantSubdomain(): string | null {
+  const host = window.location.hostname.toLowerCase();
+  const labels = host.split('.');
+  return labels.length > 1 && !/^[\d.]+$/.test(host) && !host.includes(':') ? labels[0] : null;
+}
+
+/** Explains that HIMS must be opened on the organization's subdomain, e.g. https://reddys.localhost:3000. */
+export function noTenantMessage(): string {
+  const { protocol, hostname, port } = window.location;
+  const base = /^[\d.]+$/.test(hostname) || hostname.includes(':') ? 'localhost' : hostname;   // an IP address can't take a subdomain
+  return `This address does not name an organization. Open HIMS on your organization's own address, for example ${protocol}//reddys.${base}${port ? `:${port}` : ''}`;
+}
+
 /** HIMS's own sign-in page (WSO2_AUTHENTICATION=false). */
 export const LOGIN_PATH = '/login';
 

@@ -1,0 +1,50 @@
+[2026-11-03 14:34:38] === HIMS database backup started ===
+[2026-11-03 14:34:38] Host: 103.169.179.22:50085  User: hims
+[2026-11-03 14:34:38] Destination: /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438
+[2026-11-03 14:34:38] pg_dump: pg_dump   pg_dumpall: pg_dumpall
+[2026-11-03 14:34:39] Found 21 database(s): hims_apollo hims_back_office hims_clinical_care hims_comms_docs hims_dev hims_digital_engagement hims_fhir_apollo hims_fhir_reddys hims_field_ops hims_hospital_ops hims_identity_org hims_imaging hims_integration hims_laboratory hims_patient_access hims_pharmacy_supply hims_reddys hims_revenue_cycle hims_wso2_apollo hims_wso2_identity hims_wso2_reddys
+[2026-11-03 14:34:39] Backing up hims_apollo -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_apollo.dump
+[2026-11-03 14:34:42]   OK (1.3M)
+[2026-11-03 14:34:42] Backing up hims_back_office -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_back_office.dump
+[2026-11-03 14:34:42]   OK (140K)
+[2026-11-03 14:34:42] Backing up hims_clinical_care -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_clinical_care.dump
+[2026-11-03 14:34:43]   OK (208K)
+[2026-11-03 14:34:43] Backing up hims_comms_docs -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_comms_docs.dump
+[2026-11-03 14:34:44]   OK (20K)
+[2026-11-03 14:34:44] Backing up hims_dev -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_dev.dump
+[2026-11-03 14:34:47]   OK (2.5M)
+[2026-11-03 14:34:47] Backing up hims_digital_engagement -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_digital_engagement.dump
+[2026-11-03 14:34:48]   OK (76K)
+[2026-11-03 14:34:48] Backing up hims_fhir_apollo -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_fhir_apollo.dump
+[2026-11-03 14:34:49]   OK (244K)
+[2026-11-03 14:34:49] Backing up hims_fhir_reddys -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_fhir_reddys.dump
+[2026-11-03 14:34:50]   OK (248K)
+[2026-11-03 14:34:50] Backing up hims_field_ops -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_field_ops.dump
+[2026-11-03 14:34:51]   OK (36K)
+[2026-11-03 14:34:51] Backing up hims_hospital_ops -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_hospital_ops.dump
+[2026-11-03 14:34:52]   OK (64K)
+[2026-11-03 14:34:52] Backing up hims_identity_org -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_identity_org.dump
+[2026-11-03 14:34:52]   OK (96K)
+[2026-11-03 14:34:52] Backing up hims_imaging -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_imaging.dump
+[2026-11-03 14:34:53]   OK (64K)
+[2026-11-03 14:34:53] Backing up hims_integration -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_integration.dump
+[2026-11-03 14:34:54]   OK (44K)
+[2026-11-03 14:34:54] Backing up hims_laboratory -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_laboratory.dump
+[2026-11-03 14:34:54]   OK (152K)
+[2026-11-03 14:34:54] Backing up hims_patient_access -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_patient_access.dump
+[2026-11-03 14:34:55]   OK (120K)
+[2026-11-03 14:34:55] Backing up hims_pharmacy_supply -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_pharmacy_supply.dump
+[2026-11-03 14:34:56]   OK (176K)
+[2026-11-03 14:34:56] Backing up hims_reddys -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_reddys.dump
+[2026-11-03 14:34:58]   OK (1.3M)
+[2026-11-03 14:34:58] Backing up hims_revenue_cycle -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_revenue_cycle.dump
+[2026-11-03 14:34:59]   OK (160K)
+[2026-11-03 14:34:59] Backing up hims_wso2_apollo -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_wso2_apollo.dump
+[2026-11-03 14:34:59]   OK (148K)
+[2026-11-03 14:34:59] Backing up hims_wso2_identity -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_wso2_identity.dump
+[2026-11-03 14:35:02]   OK (1.7M)
+[2026-11-03 14:35:02] Backing up hims_wso2_reddys -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/hims_wso2_reddys.dump
+[2026-11-03 14:35:02]   OK (148K)
+[2026-11-03 14:35:02] Backing up global objects (roles/tablespaces) -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_143438/globals.sql
+[2026-11-03 14:35:03]   OK
+[2026-11-03 14:35:03] === Backup completed successfully: 21 database(s) + globals ===

@@ -16,9 +16,11 @@ Run everything below from **Git Bash** (not Command Prompt / PowerShell/ cmd.exe
 
 Dumps every `hims_*` database on the server into a timestamped folder under `database/backup/dumps/`, plus a `globals.sql` file with role/tablespace definitions.
 
+The password is read from `database/backup/.env` (git-ignored), one line `PGPASSWORD=your_password`.
+A `PGPASSWORD` set in the environment overrides it.
+
 ```bash
 cd database/backup
-PGPASSWORD=your_password \
 PG_DUMP_BIN="/C/Program Files/PostgreSQL/18/bin/pg_dump.exe" \
 PG_DUMPALL_BIN="/C/Program Files/PostgreSQL/18/bin/pg_dumpall.exe" \
 ./backup_all.sh

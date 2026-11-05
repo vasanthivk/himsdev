@@ -1,0 +1,28 @@
+[2026-11-03 14:22:50] === HIMS database backup started ===
+[2026-11-03 14:22:50] Host: 103.169.179.22:50085  User: hims
+[2026-11-03 14:22:50] Destination: /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250
+[2026-11-03 14:22:50] pg_dump: pg_dump   pg_dumpall: pg_dumpall
+[2026-11-03 14:23:25] Found 21 database(s): hims_apollo hims_back_office hims_clinical_care hims_comms_docs hims_dev hims_digital_engagement hims_fhir_apollo hims_fhir_reddys hims_field_ops hims_hospital_ops hims_identity_org hims_imaging hims_integration hims_laboratory hims_patient_access hims_pharmacy_supply hims_reddys hims_revenue_cycle hims_wso2_apollo hims_wso2_identity hims_wso2_reddys
+[2026-11-03 14:23:25] Backing up hims_apollo -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_apollo.dump
+[2026-11-03 14:23:34]   OK (1.3M)
+[2026-11-03 14:23:34] Backing up hims_back_office -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_back_office.dump
+[2026-11-03 14:23:41]   OK (140K)
+[2026-11-03 14:23:41] Backing up hims_clinical_care -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_clinical_care.dump
+[2026-11-03 14:23:46]   OK (208K)
+[2026-11-03 14:23:47] Backing up hims_comms_docs -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_comms_docs.dump
+[2026-11-03 14:23:51]   OK (20K)
+[2026-11-03 14:23:51] Backing up hims_dev -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_dev.dump
+[2026-11-03 14:24:00]   OK (2.5M)
+[2026-11-03 14:24:00] Backing up hims_digital_engagement -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_digital_engagement.dump
+pg_dump: error: connection to server at "103.169.179.22", port 50085 failed: FATAL:  password authentication failed for user "hims"
+connection to server at "103.169.179.22", port 50085 failed: FATAL:  password authentication failed for user "hims"
+[2026-11-03 14:24:21]   FAILED: see /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/backup.log for details
+[2026-11-03 14:24:21] Backing up hims_fhir_apollo -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_fhir_apollo.dump
+[2026-11-03 14:24:25]   OK (244K)
+[2026-11-03 14:24:25] Backing up hims_fhir_reddys -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_fhir_reddys.dump
+[2026-11-03 14:24:32]   OK (248K)
+[2026-11-03 14:24:32] Backing up hims_field_ops -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_field_ops.dump
+[2026-11-03 14:24:37]   OK (36K)
+[2026-11-03 14:24:37] Backing up hims_hospital_ops -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_hospital_ops.dump
+[2026-11-03 14:24:45]   OK (64K)
+[2026-11-03 14:24:45] Backing up hims_identity_org -> /d/Projects/2026/himspoc/himspoc/database/backup/dumps/20261103_142250/hims_identity_org.dump
