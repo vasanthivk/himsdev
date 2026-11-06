@@ -18,7 +18,7 @@ Microservices named exactly as in your data model (`database/DATA_MODEL_README.m
 | `database/` | your 13 scripts (unchanged), `extensions/` (6 columns on `lab.analyzer`), `seed/`, `deploy.sh`; see `docs/DATABASE_CHANGES.md` |
 | `database_v2/`, `database_v3/` | the 7 consolidated services: one database each (v2), or one database `himsdev` with a schema each (v3, used by the services) |
 | `services/<name>/` | the 7 microservices (`config/microservices_consolidation.xlsx`): 6 .NET - identity-org, patient-engagement, clinical-care, diagnostics, revenue-finance, operations-supply - and `integration-comms/` (Python) |
-| `shared/Hims.Common/` | outbox relay, idempotent inbox consumer, `ref.*` replication, number sequences, Swagger, health |
+| `services/shared/Hims.Common/` | outbox relay, idempotent inbox consumer, `ref.*` replication, number sequences, Swagger, health |
 | `frontend/` | shell (3000) + patient-engagement (3001), clinical-care (3002), diagnostics (3003), revenue-finance (3006) |
 | `tools/` | `gen_entities.py` (SQL -> C# entities for every table), `gen_scaffold.py` |
 | `docs/` | `DATABASE_CHANGES.md`, `EVENTS.md`, `ENGINE_TEMPLATE.md` |

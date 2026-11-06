@@ -60,7 +60,7 @@ do_start() {
 
   if [ "$build" = "build" ]; then
     echo "== Building .NET projects =="
-    dotnet build shared/Hims.Common/Hims.Common.csproj -nologo -v quiet
+    dotnet build services/shared/Hims.Common/Hims.Common.csproj -nologo -v quiet
     for s in "${ALL_DOTNET_PROJECTS[@]}"; do
       csproj=$(ls services/"$s"/Hims.*.csproj 2>/dev/null | head -1)
       [ -z "$csproj" ] && continue

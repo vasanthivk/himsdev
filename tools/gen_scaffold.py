@@ -54,7 +54,7 @@ for num, stem, slug, ns, port in SERVICES:
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\\..\\shared\\Hims.Common\\Hims.Common.csproj" />
+    <ProjectReference Include="..\\shared\\Hims.Common\\Hims.Common.csproj" />
   </ItemGroup>
 
 </Project>
@@ -71,10 +71,10 @@ for num, stem, slug, ns, port in SERVICES:
     (d / "Dockerfile").write_text(f"""# Build context = repository root:  docker build -f services/{slug}/Dockerfile .
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY shared/Hims.Common/Hims.Common.csproj shared/Hims.Common/
+COPY services/shared/Hims.Common/Hims.Common.csproj services/shared/Hims.Common/
 COPY services/{slug}/Hims.{ns}.csproj services/{slug}/
 RUN dotnet restore services/{slug}/Hims.{ns}.csproj
-COPY shared/ shared/
+COPY services/shared/ services/shared/
 COPY services/{slug}/ services/{slug}/
 RUN dotnet publish services/{slug}/Hims.{ns}.csproj -c Release -o /app --no-restore
 

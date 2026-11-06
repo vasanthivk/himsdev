@@ -17,8 +17,8 @@ services/*/obj/
 services/*/appsettings.json
 
 # ---------- Shared: build output in every project ----------
-shared/*/bin/
-shared/*/obj/
+services/shared/*/bin/
+services/shared/*/obj/
 
 # ---------- Visual Studio cache folders (all applications) ----------
 .vs/

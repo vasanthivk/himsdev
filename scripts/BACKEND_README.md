@@ -42,7 +42,7 @@ PIDs: `./.pids/<service>.pid`
 
 | Situation | Command |
 |---|---|
-| You edited any `.cs` file in a service or in `shared/Hims.Common` | `restart` (rebuilds, so the change takes effect) |
+| You edited any `.cs` file in a service or in `services/shared/Hims.Common` | `restart` (rebuilds, so the change takes effect) |
 | You just want a clean restart and nothing changed | `restart --no-build` (fast) |
 | Starting fresh for the day, code unchanged since last run | `start --no-build` |
 | First run, or after pulling new code | `start` |
@@ -50,7 +50,7 @@ PIDs: `./.pids/<service>.pid`
 
 ## What `start` actually does
 
-1. **Build** (skipped with `--no-build`): runs `dotnet build` for `shared/Hims.Common` and every
+1. **Build** (skipped with `--no-build`): runs `dotnet build` for `services/shared/Hims.Common` and every
    service project under `services/`, one at a time, quiet output. Stops immediately if any project
    fails to build — nothing is started on a broken build.
 2. **Start .NET services**: runs `dotnet run --no-build` for identity-org, patient-engagement,

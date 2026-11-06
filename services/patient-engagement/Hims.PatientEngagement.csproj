@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\shared\Hims.Common\Hims.Common.csproj" />
+    <ProjectReference Include="..\shared\Hims.Common\Hims.Common.csproj" />
   </ItemGroup>
 
 </Project>

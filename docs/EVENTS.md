@@ -33,4 +33,4 @@ Envelope (JSON): `specVersion, id, type, source, subject, time, data, organizati
 
 `*` = beyond the data-model README's Publishes/Subscribes lists (OrganizationUpdated is not listed for identity-org; integration's OrderPlaced and
 EncounterStarted subscriptions and clinical-care's ChargePosted subscription are additions). No schema change was needed for any of them.
-Payload record definitions: `shared/Hims.Common/Events/Contracts.cs`.
+Payload record definitions: `services/shared/Hims.Common/Events/Contracts.cs`.

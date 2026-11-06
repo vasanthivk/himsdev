@@ -1,10 +1,10 @@
 # Build context = repository root:  docker build -f services/clinical-care/Dockerfile .
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY shared/Hims.Common/Hims.Common.csproj shared/Hims.Common/
+COPY services/shared/Hims.Common/Hims.Common.csproj services/shared/Hims.Common/
 COPY services/clinical-care/Hims.ClinicalCare.csproj services/clinical-care/
 RUN dotnet restore services/clinical-care/Hims.ClinicalCare.csproj
-COPY shared/ shared/
+COPY services/shared/ services/shared/
 COPY services/clinical-care/ services/clinical-care/
 RUN dotnet publish services/clinical-care/Hims.ClinicalCare.csproj -c Release -o /app --no-restore
 

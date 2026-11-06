@@ -38,7 +38,7 @@ back-office, clinical-care, comms-docs, digital-engagement, field-ops, hospital-
 
 Errors appear in **both** dated files, so the main file still shows what happened around each error.
 
-Implemented in `shared/Hims.Common/Logging/DailyFileLogger.cs` and switched on in each service's `Program.cs`:
+Implemented in `services/shared/Hims.Common/Logging/DailyFileLogger.cs` and switched on in each service's `Program.cs`:
 
 ```csharp
 builder.AddHimsFileLogging("patient-access");   // logs/patient-access/dd-MM-yyyy.log (+ dd-MM-yyyy-error.log)
