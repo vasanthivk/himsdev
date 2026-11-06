@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from . import bus, db, fhir_sync, simulator
 from .config import settings
 from .engine import EngineConfig, provision_interface
-from .fhir_client import FhirClient
+from .fhir_client import FhirClient, auth_for
 from .inbound import process_inbound
 from .logging_setup import configure_logging
 from .parsers import build_hl7v2_ack
@@ -118,7 +118,7 @@ def health(deep: bool = False):
         "service": "integration-comms", "status": "healthy" if db_ok else "degraded", "database": db_ok, "databases": databases,
         "workers": {name: (w.connected if hasattr(w, "connected") else w.is_alive()) for name, w in workers.items()},
         # ?deep=true: whether each tenant's FHIR server answers, e.g. {"reddys": true, "apollo": true}
-        "fhir": ({t.subdomain: FhirClient(t.fhir_url or settings.hapi_fhir_url).ping() for t in db.tenants()}
+        "fhir": ({t.subdomain: FhirClient(t.fhir_url or settings.hapi_fhir_url, auth=auth_for(t)).ping() for t in db.tenants()}
                  if deep and settings.fhir_sync_enabled else None),
     }
 

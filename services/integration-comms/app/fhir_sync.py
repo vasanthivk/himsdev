@@ -14,7 +14,7 @@ from typing import Callable, Optional
 from . import db
 from . import fhir_map as fm
 from .config import Tenant, settings
-from .fhir_client import FhirClient, FhirError
+from .fhir_client import FhirClient, FhirError, auth_for
 
 log = logging.getLogger("hub.fhirsync")
 
@@ -161,14 +161,14 @@ def tenant_for(env: dict) -> Tenant:
 
 
 def client_for(tenant: Tenant) -> Optional[FhirClient]:
-    """The tenant's FHIR server; HAPI_FHIR_URL when the tenant has none."""
+    """The tenant's FHIR server (with the tenant's FHIR credentials); HAPI_FHIR_URL when the tenant has none."""
     if not settings.fhir_sync_enabled:
         return None
     url = tenant.fhir_url or settings.hapi_fhir_url
     if not url:
         raise FhirError(f"No FHIR server configured for {tenant.subdomain} (set {tenant.subdomain.upper()}_FHIR_URL)")
     if url not in _clients:
-        _clients[url] = FhirClient(url)
+        _clients[url] = FhirClient(url, auth=auth_for(tenant))
     return _clients[url]
 
 

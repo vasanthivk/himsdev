@@ -1,6 +1,6 @@
 """All settings come from environment variables (services/integration-comms/.env); defaults suit a local developer machine."""
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -32,6 +32,12 @@ class Settings:
     # fallback for an event whose organization has no tenant entry; empty = such an event fails instead of going to a shared server.
     hapi_fhir_url: str = os.getenv("HAPI_FHIR_URL", "").rstrip("/")
     fhir_sync_enabled: bool = _bool("FHIR_SYNC_ENABLED", True)
+    # FHIR authentication: each tenant's WSO2 IS client credentials (<SUBDOMAIN>_FHIR_TOKEN_URL / _CLIENT_ID / _CLIENT_SECRET, see
+    # load_tenants()). Scopes requested for the token; the FHIR gateway needs fhir.read to read and fhir.write to write.
+    fhir_scope: str = os.getenv("FHIR_SCOPE", "fhir.read fhir.write")
+    fhir_token_verify_tls: bool = _bool("FHIR_TOKEN_VERIFY_TLS", True)   # WSO2 IS certificate; false = dev only (self-signed)
+    # WSO2 IS's own (self-signed) certificate to trust on the token endpoint instead of the public CAs, e.g. ../../fhir/certs/wso2-is.crt.pem
+    fhir_token_ca_file: str = os.getenv("FHIR_TOKEN_CA_FILE", "").strip()
 
     # Open Integration Engine (Mirth-compatible REST API). Empty ENGINE_URL = engine provisioning disabled.
     engine_url: str = os.getenv("ENGINE_URL", "").rstrip("/")
@@ -67,11 +73,17 @@ class Tenant:
     organization_id: int  # HIMS core.organization of the tenant
     database_url: str     # the tenant's own database, e.g. .../hims_reddys
     fhir_url: str         # e.g. http://localhost:8080/reddys/fhir; empty = HAPI_FHIR_URL
+    # WSO2 IS client credentials for the FHIR server, e.g. https://localhost:9443/t/newmeksolutions.com/oauth2/token;
+    # empty token URL = FHIR is called without a token.
+    fhir_token_url: str = ""
+    fhir_client_id: str = ""
+    fhir_client_secret: str = field(default="", repr=False)
 
 
 def load_tenants() -> list:
     """Every tenant, from <SUBDOMAIN>_ORGANIZATION_ID with its <SUBDOMAIN>_DATABASE_URL and <SUBDOMAIN>_FHIR_URL, e.g.
-    REDDYS_ORGANIZATION_ID=1, REDDYS_DATABASE_URL=postgresql://.../hims_reddys, REDDYS_FHIR_URL=http://localhost:8080/reddys/fhir.
+    REDDYS_ORGANIZATION_ID=1, REDDYS_DATABASE_URL=postgresql://.../hims_reddys, REDDYS_FHIR_URL=http://localhost:8080/reddys/fhir,
+    and the FHIR credentials REDDYS_FHIR_TOKEN_URL / REDDYS_FHIR_CLIENT_ID / REDDYS_FHIR_CLIENT_SECRET.
     Ordered by organization id; the first is the default (a request or device message that names no organization)."""
     tenants = []
     for key, org in os.environ.items():
@@ -83,7 +95,12 @@ def load_tenants() -> list:
         database_url = os.getenv(f"{prefix}_DATABASE_URL", "").strip()
         if not database_url:
             raise RuntimeError(f"{key} is set but {prefix}_DATABASE_URL is missing")
-        tenants.append(Tenant(prefix.lower(), int(org), database_url, os.getenv(f"{prefix}_FHIR_URL", "").strip().rstrip("/")))
+        token_url = os.getenv(f"{prefix}_FHIR_TOKEN_URL", "").strip()
+        client_id, client_secret = os.getenv(f"{prefix}_FHIR_CLIENT_ID", "").strip(), os.getenv(f"{prefix}_FHIR_CLIENT_SECRET", "").strip()
+        if token_url and not (client_id and client_secret):
+            raise RuntimeError(f"{prefix}_FHIR_TOKEN_URL is set but {prefix}_FHIR_CLIENT_ID / {prefix}_FHIR_CLIENT_SECRET is missing")
+        tenants.append(Tenant(prefix.lower(), int(org), database_url, os.getenv(f"{prefix}_FHIR_URL", "").strip().rstrip("/"),
+                              token_url, client_id, client_secret))
     if not tenants:
         raise RuntimeError("No tenant configured: set <SUBDOMAIN>_ORGANIZATION_ID and <SUBDOMAIN>_DATABASE_URL (e.g. REDDYS_...)")
     return sorted(tenants, key=lambda t: t.organization_id)

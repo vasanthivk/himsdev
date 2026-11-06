@@ -40,6 +40,26 @@ services:
       HAPI_FHIR_TESTER_HOME_SERVER_ADDRESS: ${PUBLIC_BASE_URL}/apollo/fhir/
       HAPI_FHIR_TESTER_HOME_NAME: Apollo
 
+  # Checks the WSO2 IS access token of every request before the gateway forwards it (nginx auth_request, see nginx.conf).
+  fhir-auth:
+    build: ./auth
+    container_name: fhir-auth
+    restart: unless-stopped
+    environment:
+      REDDYS_ISSUER: ${REDDYS_ISSUER}
+      REDDYS_JWKS_URL: ${REDDYS_JWKS_URL}
+      APOLLO_ISSUER: ${APOLLO_ISSUER}
+      APOLLO_JWKS_URL: ${APOLLO_JWKS_URL}
+      FHIR_READ_SCOPE: ${FHIR_READ_SCOPE:-fhir.read}
+      FHIR_WRITE_SCOPE: ${FHIR_WRITE_SCOPE:-fhir.write}
+      FHIR_AUDIENCE: ${FHIR_AUDIENCE:-}
+      JWKS_VERIFY_TLS: ${JWKS_VERIFY_TLS:-true}
+      JWKS_CA_FILE: ${JWKS_CA_FILE:-}
+      JWKS_CHECK_HOSTNAME: ${JWKS_CHECK_HOSTNAME:-true}
+    volumes:
+      - ./certs:/certs:ro
+    networks: [fhir]
+
   gateway:
     image: nginx:1.27-alpine
     container_name: fhir-gateway
@@ -48,7 +68,7 @@ services:
       - "8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on: [hapi-reddys, hapi-apollo]
+    depends_on: [hapi-reddys, hapi-apollo, fhir-auth]
     networks: [fhir]
 
 networks:

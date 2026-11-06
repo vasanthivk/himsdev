@@ -13,3 +13,24 @@ PUBLIC_BASE_URL=http://localhost:8080
 
 # Pin a specific HAPI version in production, e.g. v8.4.0
 HAPI_IMAGE=hapiproject/hapi:latest
+
+# Authentication (fhir-auth, see auth/validator.py): every request needs a WSO2 IS access token (JWT) of the tenant in its path.
+# <TENANT>_ISSUER must equal the token's "iss" exactly; <TENANT>_JWKS_URL must be reachable from the fhir-auth container.
+REDDYS_ISSUER=https://localhost:9443/t/newmeksolutions.com/oauth2/token
+REDDYS_JWKS_URL=https://192.168.6.142:9443/t/newmeksolutions.com/oauth2/jwks
+APOLLO_ISSUER=https://localhost:9443/t/apollo.com/oauth2/token
+APOLLO_JWKS_URL=https://192.168.6.142:9443/t/apollo.com/oauth2/jwks
+# Scopes of the "HIMS FHIR" API resource: reads (GET/HEAD) need the first, writes the second.
+FHIR_READ_SCOPE=fhir.read
+FHIR_WRITE_SCOPE=fhir.write
+# Optional: the token's "aud" must contain this (e.g. the API resource identifier); empty = not checked.
+FHIR_AUDIENCE=
+# Verify the WSO2 IS certificate when fetching the JWKS. WSO2 IS ships with a self-signed certificate: either give it a trusted
+# one, or (dev only) set this to false.
+JWKS_VERIFY_TLS=true
+# Trust exactly WSO2 IS's own certificate (certs/ is mounted at /certs). Refresh the file when WSO2's certificate changes:
+#   echo | openssl s_client -connect 192.168.6.142:9443 2>/dev/null | openssl x509 > certs/wso2-is.crt.pem
+JWKS_CA_FILE=/certs/wso2-is.crt.pem
+# WSO2's default certificate names only localhost / 127.0.0.1, not 192.168.6.142, so the name check is skipped; the pinned
+# certificate above is still required. Set to true once WSO2 has a certificate that names the address in the JWKS URLs.
+JWKS_CHECK_HOSTNAME=false

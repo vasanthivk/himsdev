@@ -31,24 +31,42 @@ Each tenant gets its own HAPI FHIR instance and its own PostgreSQL database on
    ```
    First startup takes 1–3 minutes while HAPI creates its schema in each database.
 
+## Authentication
+
+Every request needs `Authorization: Bearer <token>`, where the token is a WSO2 Identity Server access token (JWT) of the tenant in
+the path. nginx asks `fhir-auth` ([auth/validator.py](auth/validator.py)) before forwarding anything to HAPI:
+
+| Check | Refused with |
+|-------|--------------|
+| Signature (tenant's `<TENANT>_JWKS_URL`), expiry, issuer = `<TENANT>_ISSUER` | 401 |
+| A Reddys token used on `/apollo/fhir` (the issuer is the tenant's) | 401 |
+| `fhir.read` for GET/HEAD, `fhir.write` for POST/PUT/PATCH/DELETE | 403 |
+
+In each WSO2 IS tenant: an API resource "HIMS FHIR" with the scopes `fhir.read` and `fhir.write`, and a Machine-to-Machine
+application per caller (client credentials grant, access token type **JWT**) authorized for it. The Integration Hub takes its
+credentials from `<SUBDOMAIN>_FHIR_TOKEN_URL / _FHIR_CLIENT_ID / _FHIR_CLIENT_SECRET` in `services/integration-comms/.env`.
+
+The HAPI web test UI (`/reddys/`, `/apollo/`) is behind the same check, so it is not usable from a browser any more.
+
 ## Test
 
 ```bash
-# Capability statements
-curl http://localhost:8080/reddys/fhir/metadata
-curl http://localhost:8080/apollo/fhir/metadata
+# A token of the Reddys tenant
+TOKEN=$(curl -sk -u "<CLIENT_ID>:<CLIENT_SECRET>" -d "grant_type=client_credentials&scope=fhir.read fhir.write" \
+  https://localhost:9443/t/newmeksolutions.com/oauth2/token | jq -r .access_token)
+
+# Capability statement (401 without the token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/reddys/fhir/metadata
 
 # Create a patient in Reddys only
-curl -X POST http://localhost:8080/reddys/fhir/Patient \
+curl -X POST http://localhost:8080/reddys/fhir/Patient -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/fhir+json" \
   -d '{"resourceType":"Patient","name":[{"family":"Rao","given":["Kiran"]}]}'
 
-# Should appear in Reddys, not in Apollo
-curl "http://localhost:8080/reddys/fhir/Patient?family=Rao"
-curl "http://localhost:8080/apollo/fhir/Patient?family=Rao"
+# Found in Reddys; the same token is refused on Apollo (401)
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/reddys/fhir/Patient?family=Rao"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/apollo/fhir/Patient?family=Rao"
 ```
-
-Web test UI: `http://localhost:8080/reddys/` and `http://localhost:8080/apollo/`.
 
 ## Adding a tenant
 
@@ -62,7 +80,6 @@ Web test UI: `http://localhost:8080/reddys/` and `http://localhost:8080/apollo/`
 - **Rotate the DB password** (it was shared in chat) and keep `.env` out of version control.
 - Consider a separate DB user per tenant (`hims_reddys`, `hims_apollo`) for stronger isolation.
 - Pin `HAPI_IMAGE` to a specific version instead of `latest`.
-- Put TLS and authentication (e.g. OAuth2/SMART proxy or nginx auth) in front of the gateway —
-  HAPI has no auth enabled by default.
+- Put TLS in front of the gateway: bearer tokens must not travel over plain HTTP.
 - Each instance uses up to 20 DB connections (`SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE`);
   check this against PostgreSQL `max_connections`.
