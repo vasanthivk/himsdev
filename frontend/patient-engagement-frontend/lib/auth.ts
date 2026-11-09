@@ -1,5 +1,6 @@
 // WSO2 Identity Server sign-in (OpenID Connect authorization code flow + PKCE, public client). Shared by every zone (copied in by
-// sync-shared.sh). The shell serves every zone from one origin, so the session in sessionStorage is seen by all of them.
+// sync-shared.sh). The shell serves every zone from one origin, so the session in localStorage is seen by all of them, in every
+// tab, and survives closing the tab or the browser until logout or until the refresh token expires.
 // Multi-tenant: the WSO2 settings depend on the subdomain (apollo.localhost -> APOLLO_WSO2_*) and come from the shell's
 // /api/auth/config route at runtime. Each subdomain is its own browser origin, so tenants never share a session.
 //
@@ -63,9 +64,18 @@ const sha256 = async (s: string) => b64url(new Uint8Array(await crypto.subtle.di
 const jwtClaims = (jwt: string) =>
   JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))));
 
+let watchingLogout = false;
+
 function readSession(): Session | null {
-  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null'); } catch { return null; }
+  if (!watchingLogout) {
+    watchingLogout = true;
+    // Another tab logged out (or its refresh failed): reload, so AuthGate sends this tab to the login page too.
+    window.addEventListener('storage', (e) => { if ((e.key === SESSION_KEY || e.key === null) && !e.newValue) window.location.reload(); });
+  }
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null'); } catch { return null; }
 }
+
+const saveSession = (session: Session) => localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 
 function storeSession(t: any, prev?: Session): Session {
   const idToken: string = t.id_token ?? prev?.idToken;
@@ -85,7 +95,7 @@ function storeSession(t: any, prev?: Session): Session {
       roles: Array.isArray(roles) ? roles : String(roles).split(','),
     },
   };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  saveSession(session);
   return session;
 }
 
@@ -117,7 +127,7 @@ export function storeHimsSession(r: { accessToken: string; expiresIn: number }) 
     expiresAt: Date.now() + (Number(r.expiresIn) - 30) * 1000,
     user: { sub: c.sub, name: c.name ?? c.preferred_username, username: c.preferred_username, roles: Array.isArray(roles) ? roles : [roles] },
   };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  saveSession(session);
 }
 
 /** Only allows returning to a path on this site after login. */
@@ -137,7 +147,13 @@ export async function getAccessToken(): Promise<string | null> {
   if (!s.refreshToken) return null;
   refreshing ??= tokenRequest({ grant_type: 'refresh_token', refresh_token: s.refreshToken })
     .then((t) => storeSession(t, s))
-    .catch(() => { sessionStorage.removeItem(SESSION_KEY); return null; })
+    .catch(() => {
+      // Another tab may have refreshed first and been given a new refresh token, which made this one invalid.
+      const latest = readSession();
+      if (latest && latest.refreshToken !== s.refreshToken && latest.expiresAt > Date.now()) return latest;
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    })
     .finally(() => { refreshing = null; });
   return (await refreshing)?.accessToken ?? null;
 }
@@ -172,7 +188,7 @@ export async function handleCallback(): Promise<string> {
 export async function logout() {
   if (HIMS_LOGIN) {
     const s = readSession();
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
     // Best effort: records logout_at for this session; the page leaves either way.
     if (s) await fetch(`${(process.env.NEXT_PUBLIC_IDENTITY_ORG_SERVICE ?? '').replace(/\/+$/, '')}/api/auth/logout`,
       { method: 'POST', headers: { Authorization: `Bearer ${s.accessToken}` }, keepalive: true }).catch(() => undefined);
@@ -181,7 +197,7 @@ export async function logout() {
   }
   const cfg = await tenantConfig();
   const s = readSession();
-  sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(LOGIN_KEY);
   // WSO2 IS only accepts a post-logout URI that matches the app's registered callback URL, so return to the callback page;
   // without a code in the URL it forwards to "/".
